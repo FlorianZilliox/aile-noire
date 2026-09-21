@@ -13,6 +13,6 @@ png = (RACINE / 'assets' / 'dragon_sheet.png').read_bytes()
 meta = (RACINE / 'assets' / 'dragon_sheet.json').read_text(encoding='utf-8')
 html = (source.replace('/*SPRITE_META*/null', meta.strip())
               .replace('/*SPRITE_DATA*/', base64.b64encode(png).decode('ascii')))
-sortie = RACINE / 'Aile-Noire.html'
+sortie = RACINE / 'Dragon-Rider.html'
 sortie.write_text(html, encoding='utf-8')
 print(f"{sortie.name} : {len(html) / 1e6:.1f} Mo")
