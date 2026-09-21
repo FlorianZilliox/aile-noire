@@ -1,0 +1,1129 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Aile Noire</title>
+<style>
+  /* Un seul monde visuel : une console 16 bits. Pas de variante claire/sombre. */
+  [hidden] { display: none !important; }
+  :root {
+    --fond: #0b0c18;
+    --croix: #2c2d3b;
+    --croix-creux: #1d1e29;
+    --rouge: #d8343c;
+    --jaune: #f0c232;
+    --plastique: #c4c1d0;
+    --plastique-ombre: #9f9bb1;
+    --b: clamp(44px, 8vmin, 60px);
+  }
+  html, body { height: 100%; }
+  body {
+    margin: 0; overflow: hidden; background: var(--fond);
+    -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+    font-family: ui-rounded, "Arial Rounded MT Bold", system-ui, sans-serif;
+  }
+  #jeu {
+    position: fixed; inset: 0; touch-action: none; background: var(--fond);
+    display: flex; align-items: center; justify-content: center;
+  }
+  #jeu.portrait { flex-direction: column; justify-content: flex-start; padding-top: env(safe-area-inset-top, 0px); }
+  #ecran { display: block; flex: none; image-rendering: pixelated; image-rendering: crisp-edges; }
+
+  .manette {
+    position: absolute; left: 0; right: 0; bottom: 0; pointer-events: none;
+    display: flex; justify-content: space-between; align-items: flex-end;
+    padding: 0 max(16px, env(safe-area-inset-right, 0px)) calc(env(safe-area-inset-bottom, 0px) + 14px) max(16px, env(safe-area-inset-left, 0px));
+  }
+  #jeu.paysage .manette { opacity: .78; }
+  #jeu.portrait .manette {
+    position: relative; flex: 1; align-items: center; width: 100%; box-sizing: border-box;
+    background: linear-gradient(var(--plastique), var(--plastique-ombre));
+    border-top: 3px solid #8b879e; padding-top: 10px;
+  }
+  .croix {
+    pointer-events: auto; display: grid;
+    grid-template-columns: repeat(3, var(--b)); grid-template-rows: repeat(3, var(--b));
+    grid-template-areas: ". haut ." "gauche moyeu droite" ". bas .";
+    filter: drop-shadow(0 3px 0 rgba(0, 0, 0, .35));
+  }
+  .croix button, .moyeu { background: var(--croix); border: 0; padding: 0; }
+  .croix button {
+    -webkit-tap-highlight-color: transparent; touch-action: none; cursor: pointer;
+    color: #8e8ca3; display: grid; place-items: center;
+  }
+  .croix button svg { width: 38%; height: 38%; fill: currentColor; }
+  .croix button.on { background: var(--croix-creux); color: #c9c7da; }
+  #btn-haut { grid-area: haut; border-radius: 7px 7px 0 0; }
+  #btn-bas { grid-area: bas; border-radius: 0 0 7px 7px; }
+  #btn-gauche { grid-area: gauche; border-radius: 7px 0 0 7px; }
+  #btn-droite { grid-area: droite; border-radius: 0 7px 7px 0; }
+  .moyeu { grid-area: moyeu; display: grid; place-items: center; }
+  .moyeu::after { content: ""; width: 42%; height: 42%; border-radius: 50%; background: var(--croix-creux); }
+
+  .actions { pointer-events: auto; display: flex; gap: 14px; align-items: flex-start; }
+  .action { display: grid; justify-items: center; gap: 5px; }
+  .action:first-child { margin-top: calc(var(--b) * .55); }
+  .rond {
+    -webkit-tap-highlight-color: transparent; touch-action: none; cursor: pointer;
+    width: calc(var(--b) * 1.3); height: calc(var(--b) * 1.3); border-radius: 50%; border: 0; padding: 0;
+    font-family: inherit; font-weight: 800; font-size: calc(var(--b) * .36); line-height: 1;
+    box-shadow: inset 0 -5px 0 rgba(0, 0, 0, .22), 0 3px 0 rgba(0, 0, 0, .4);
+    transition: transform .06s;
+  }
+  .rond.on { transform: translateY(2px); box-shadow: inset 0 -2px 0 rgba(0, 0, 0, .22), 0 1px 0 rgba(0, 0, 0, .4); }
+  #btn-ruee { background: var(--jaune); color: #5a4300; }
+  #btn-feu { background: var(--rouge); color: #fff3e6; }
+  .action span { font-size: 11px; font-weight: 800; letter-spacing: .12em; color: #e9e6f5; text-shadow: 0 1px 0 #000; }
+  #jeu.portrait .action span { color: #4b4760; text-shadow: none; }
+  button:focus-visible { outline: 2px solid #fff3c4; outline-offset: 2px; }
+</style>
+
+<div id="jeu" class="paysage">
+  <canvas id="ecran" aria-label="Aile Noire : un dragon noir et son cavalier au-dessus d'un fjord à l'aube"></canvas>
+  <div class="manette">
+    <div class="croix" aria-label="Croix directionnelle">
+      <button type="button" id="btn-haut" data-k="up" aria-label="Monter"><svg viewBox="0 0 10 10"><path d="M5 1 9.5 8h-9z"/></svg></button>
+      <button type="button" id="btn-gauche" data-k="left" aria-label="Gauche"><svg viewBox="0 0 10 10"><path d="M1 5 8 .5v9z"/></svg></button>
+      <div class="moyeu"></div>
+      <button type="button" id="btn-droite" data-k="right" aria-label="Droite"><svg viewBox="0 0 10 10"><path d="M9 5 2 .5v9z"/></svg></button>
+      <button type="button" id="btn-bas" data-k="down" aria-label="Descendre"><svg viewBox="0 0 10 10"><path d="M5 9 9.5 2h-9z"/></svg></button>
+    </div>
+    <div class="actions">
+      <div class="action"><button type="button" class="rond" id="btn-ruee" data-k="ruee" aria-label="Ruée">B</button><span>RUÉE</span></div>
+      <div class="action"><button type="button" class="rond" id="btn-feu" data-k="fire" aria-label="Cracher le feu">A</button><span>FEU</span></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  'use strict';
+  // Planche générée par outils/extraire_sprites.py + outils/animer_ailes.py (grille, ancre, marionnette).
+  const META = /*SPRITE_META*/null;
+  const SHEET = "data:image/png;base64,/*SPRITE_DATA*/";
+
+  // ================= Constantes =================
+  const AN = META.animations, RIG = META.rig;
+  const K = 0.5;                                    // les sprites sont affichés en demi-résolution
+  const FW = Math.round(META.frameWidth * K), FH = Math.round(META.frameHeight * K);
+  const AX = Math.round(META.anchor.x * K), AY = Math.round(META.anchor.y * K);
+  const G = META.groundOffset * K;
+  const BOUCHE = { x: META.mouth.x * K, y: META.mouth.y * K };
+  const V = { AIR: 175, VERT: 120, PIQUE: 235, MARCHE: 85, COURSE: 150, SAUT: 270, RUEE: 440, BOULE: 380 };
+  const LOOPING = { duree: 0.82, rayon: 34 };
+  const FPS = { attack: 16, jump: 14, land: 16, dead: 6, hurt: 10, idle: 8, flight: 12 };
+  const reduit = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const CALME = /calme/.test(location.hash);        // Aile-Noire.html#calme : entraînement sans corbeaux
+  // palette du dragon (15 teintes, du noir bleuté au blanc chaud) : une vraie palette de sprite
+  const RAMPE = ['#06070d', '#0d0f1b', '#141729', '#1c2036', '#252a44', '#303652', '#3c4362', '#4a5273',
+                 '#5b6486', '#6f789a', '#868fae', '#a0a8c3', '#bfc4d8', '#dfe0ea', '#fff6e0'];
+  const ENCRE = '#0b0c18';
+
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const mix = (a, b, t) => a + (b - a) * t;
+  const approche = (v, c, k) => v + (c - v) * Math.min(1, k);
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const frac = (x) => x - Math.floor(x);
+  const hash = (n) => frac(Math.sin(n * 127.1 + 311.7) * 43758.5453);
+  const toile = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
+  const hexRgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+
+  // ================= Écran : basse résolution, agrandie en pixels nets =================
+  const cvs = document.getElementById('ecran');
+  const ctx = cvs.getContext('2d');
+  const jeu = document.getElementById('jeu');
+  let W = 400, H = 224, SOL = 200, GA = 176, HORIZON = 150, PLAFOND = 30, ECHELLE = 3;
+  function disposer() {
+    const vw = innerWidth, vh = innerHeight;
+    const portrait = vh > vw * 1.05;
+    jeu.className = portrait ? 'portrait' : 'paysage';
+    const zoneH = portrait ? Math.min(Math.round(vw * 0.82), vh - 250) : vh;
+    ECHELLE = Math.max(1, Math.round(zoneH / 232));
+    H = Math.floor(zoneH / ECHELLE);
+    W = Math.min(560, Math.floor(vw / ECHELLE));
+    cvs.width = W; cvs.height = H;
+    cvs.style.width = W * ECHELLE + 'px'; cvs.style.height = H * ECHELLE + 'px';
+    ctx.imageSmoothingEnabled = false;
+    SOL = H - 24; GA = SOL - G; HORIZON = SOL - 52; PLAFOND = 30;
+  }
+  addEventListener('resize', disposer);
+
+  // ================= Police bitmap 5×7 =================
+  const GLYPHES = {
+    A: [14, 17, 17, 31, 17, 17, 17], B: [30, 17, 17, 30, 17, 17, 30], C: [14, 17, 16, 16, 16, 17, 14],
+    D: [30, 17, 17, 17, 17, 17, 30], E: [31, 16, 16, 30, 16, 16, 31], F: [31, 16, 16, 30, 16, 16, 16],
+    G: [14, 17, 16, 23, 17, 17, 15], H: [17, 17, 17, 31, 17, 17, 17], I: [14, 4, 4, 4, 4, 4, 14],
+    J: [7, 2, 2, 2, 2, 18, 12], K: [17, 18, 20, 24, 20, 18, 17], L: [16, 16, 16, 16, 16, 16, 31],
+    M: [17, 27, 21, 21, 17, 17, 17], N: [17, 17, 25, 21, 19, 17, 17], O: [14, 17, 17, 17, 17, 17, 14],
+    P: [30, 17, 17, 30, 16, 16, 16], Q: [14, 17, 17, 17, 21, 18, 13], R: [30, 17, 17, 30, 20, 18, 17],
+    S: [15, 16, 16, 14, 1, 1, 30], T: [31, 4, 4, 4, 4, 4, 4], U: [17, 17, 17, 17, 17, 17, 14],
+    V: [17, 17, 17, 17, 17, 10, 4], W: [17, 17, 17, 21, 21, 21, 10], X: [17, 17, 10, 4, 10, 17, 17],
+    Y: [17, 17, 10, 4, 4, 4, 4], Z: [31, 1, 2, 4, 8, 16, 31],
+    0: [14, 17, 19, 21, 25, 17, 14], 1: [4, 12, 4, 4, 4, 4, 14], 2: [14, 17, 1, 2, 4, 8, 31],
+    3: [31, 2, 4, 2, 1, 17, 14], 4: [2, 6, 10, 18, 31, 2, 2], 5: [31, 16, 30, 1, 1, 17, 14],
+    6: [6, 8, 16, 30, 17, 17, 14], 7: [31, 1, 2, 4, 8, 8, 8], 8: [14, 17, 17, 14, 17, 17, 14],
+    9: [14, 17, 17, 15, 1, 2, 12], ' ': [0, 0, 0, 0, 0, 0, 0], '!': [4, 4, 4, 4, 4, 0, 4],
+    '?': [14, 17, 1, 2, 4, 0, 4], '.': [0, 0, 0, 0, 0, 0, 4], ':': [0, 0, 4, 0, 0, 4, 0],
+    '-': [0, 0, 0, 14, 0, 0, 0], '+': [0, 4, 4, 31, 4, 4, 0], '/': [1, 1, 2, 4, 8, 16, 16],
+    "'": [4, 4, 8, 0, 0, 0, 0], '×': [0, 17, 10, 4, 10, 17, 0], '·': [0, 0, 0, 4, 0, 0, 0],
+    '(': [2, 4, 8, 8, 8, 4, 2], ')': [8, 4, 2, 2, 2, 4, 8], '=': [0, 0, 31, 0, 31, 0, 0],
+    '←': [0, 4, 8, 31, 8, 4, 0], '→': [0, 4, 2, 31, 2, 4, 0], '↑': [4, 14, 21, 4, 4, 4, 0], '↓': [0, 4, 4, 4, 21, 14, 4],
+  };
+  const ACCENTS = { 'É': ['E', [2, 4]], 'È': ['E', [8, 4]], 'Ê': ['E', [4, 10]], 'À': ['A', [8, 4]], 'Ç': ['C', null, [4, 8]] };
+  function motifGlyphe(ch) {
+    const a = ACCENTS[ch];
+    const base = GLYPHES[a ? a[0] : ch] || GLYPHES['?'];
+    return { base, dessus: a && a[1], dessous: a && a[2] };
+  }
+  const cacheTexte = new Map();
+  // couleur : une teinte, ou 7 teintes (une par ligne du glyphe, pour les logos en dégradé)
+  function rendreTexte(s, couleur, k, style) {
+    const cle = s + '|' + couleur + '|' + k + '|' + style;
+    let c = cacheTexte.get(cle);
+    if (c) return c;
+    if (cacheTexte.size > 300) cacheTexte.clear();
+    const marge = style === 'contour' ? k : 0;
+    c = toile(s.length * 6 * k + 2 * marge + k, 12 * k + 2 * marge);
+    const g = c.getContext('2d');
+    const couleurs = Array.isArray(couleur) ? couleur : null;
+    const tracer = (ox, oy, teinte) => {
+      [...s].forEach((ch, n) => {
+        const { base, dessus, dessous } = motifGlyphe(ch);
+        const x0 = ox + n * 6 * k, y0 = oy + 2 * k;
+        const ligne = (bits, r) => {
+          for (let b = 0; b < 5; b++) if (bits & (16 >> b)) {
+            g.fillStyle = teinte || (couleurs ? couleurs[clamp(r, 0, 6)] : couleur);
+            g.fillRect(x0 + b * k, y0 + r * k, k, k);
+          }
+        };
+        base.forEach((bits, r) => ligne(bits, r));
+        if (dessus) { ligne(dessus[0], -2); ligne(dessus[1], -1); }
+        if (dessous) { ligne(dessous[0], 7); ligne(dessous[1], 8); }
+      });
+    };
+    if (style === 'contour') {
+      for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [1, 1], [-1, 1], [1, -1], [1, 2], [0, 2], [-1, 2]])
+        tracer(marge + dx * k, marge + dy * k, ENCRE);
+    } else if (style === 'ombre') tracer(k, k, ENCRE);
+    tracer(marge, marge, null);
+    cacheTexte.set(cle, c);
+    return c;
+  }
+  function texte(s, x, y, couleur = '#fff6e0', k = 1, style = 'ombre', aligne = 'gauche') {
+    const c = rendreTexte(s, couleur, k, style);
+    const lx = aligne === 'centre' ? x - Math.floor(c.width / 2) : aligne === 'droite' ? x - c.width : x;
+    ctx.drawImage(c, Math.round(lx), Math.round(y - 2 * k));
+  }
+
+  // ================= Planche : demi-résolution, palette 15 teintes, transparence nette =================
+  let PL = null, RG = null;   // PL[jeu] = planche ; RG[jeu] = pièces de la marionnette
+  function durcir(c) {
+    const g = c.getContext('2d'), d = g.getImageData(0, 0, c.width, c.height), p = d.data;
+    for (let i = 3; i < p.length; i += 4) p[i] = p[i] < 128 ? 0 : 255;
+    g.putImageData(d, 0, 0);
+    return c;
+  }
+  function silhouette(src, teinte) {
+    const c = toile(src.width, src.height), g = c.getContext('2d');
+    g.drawImage(src, 0, 0);
+    g.globalCompositeOperation = 'source-in';
+    g.fillStyle = teinte; g.fillRect(0, 0, c.width, c.height);
+    return c;
+  }
+  function assombrir(src, f) {
+    const c = toile(src.width, src.height), g = c.getContext('2d');
+    g.drawImage(src, 0, 0);
+    const d = g.getImageData(0, 0, c.width, c.height), p = d.data;
+    for (let i = 0; i < p.length; i += 4) { p[i] *= f; p[i + 1] *= f; p[i + 2] *= f; }
+    g.putImageData(d, 0, 0);
+    return c;
+  }
+  function construirePlanches(img) {
+    const w = Math.round(img.width * K), h = Math.round(img.height * K);
+    const c = toile(w, h), g = c.getContext('2d');
+    g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+    g.drawImage(img, 0, 0, w, h);
+    const d = g.getImageData(0, 0, w, h), p = d.data, R = RAMPE.map(hexRgb), n = R.length - 1;
+    for (let i = 0; i < p.length; i += 4) {
+      if (p[i + 3] < 110) { p[i] = p[i + 1] = p[i + 2] = p[i + 3] = 0; continue; }
+      const l = (p[i] * 0.3 + p[i + 1] * 0.59 + p[i + 2] * 0.11) / 255;
+      const [r, gg, b] = R[Math.min(n, Math.round(Math.pow(l, 0.92) * n))];
+      p[i] = r; p[i + 1] = gg; p[i + 2] = b; p[i + 3] = 255;
+    }
+    g.putImageData(d, 0, 0);
+    return { normal: c, blanc: silhouette(c, '#ffffff'), fantome: silhouette(c, '#8b7dff') };
+  }
+  const rel = ([x, y]) => [x * K, y * K];
+  function chemin(g, poly) {
+    g.beginPath();
+    poly.forEach((pt, i) => { const [x, y] = rel(pt); i ? g.lineTo(x + AX, y + AY) : g.moveTo(x + AX, y + AY); });
+    g.closePath();
+  }
+  function piece(src, anim, image, garder, effacer = []) {
+    const c = toile(FW, FH), g = c.getContext('2d');
+    if (garder) { g.save(); chemin(g, garder); g.clip(); }
+    g.drawImage(src, image * FW, AN[anim].row * FH, FW, FH, 0, 0, FW, FH);
+    if (garder) g.restore();
+    g.globalCompositeOperation = 'destination-out';
+    for (const e of effacer) { chemin(g, e); g.fill(); }
+    return durcir(c);
+  }
+  function construireRig(src, normal) {
+    const { anim, frame } = RIG.ref;
+    const aile = piece(src, anim, frame, RIG.wing.poly);
+    return {
+      aile,
+      dessous: normal ? assombrir(aile, RIG.wing.under) : aile,
+      loin: normal ? assombrir(aile, RIG.wing.far.shade) : aile,
+      queue: piece(src, anim, frame, RIG.tail.poly, [RIG.wing.poly]),
+      corps: piece(src, anim, frame, null, [RIG.wing.poly, RIG.tail.cut]),
+      corpsSansTete: piece(src, anim, frame, null, [RIG.wing.poly, RIG.tail.cut, RIG.head.erase]),
+      tetes: RIG.head.frames.map((t) => piece(src, t.anim, t.frame, RIG.head.poly)),
+    };
+  }
+  const EPAULE = rel(RIG.wing.hinge[1]);
+  const BETA = Math.atan2(RIG.wing.hinge[1][1] - RIG.wing.hinge[0][1], RIG.wing.hinge[1][0] - RIG.wing.hinge[0][0]);
+  const LOIN = RIG.wing.far;
+  const PIVOT_QUEUE = rel(RIG.tail.pivot);
+  const DECALAGE_TETE = RIG.head.frames.map((t) => [t.dx * K, t.dy * K]);
+
+  // ================= Décor : tuiles pixel pré-calculées (parallaxe infinie) =================
+  const TUILE = 512;
+  const tri = (u) => 1 - 2 * Math.abs(frac(u) - 0.5);
+  let DECOR = null;
+  function tuileRelief(h, hauteur, peindre) {
+    const c = toile(TUILE, hauteur), g = c.getContext('2d');
+    for (let x = 0; x < TUILE; x++) {
+      const hx = Math.round(h(x)), pente = h((x + 1) % TUILE) - h(x);
+      for (let y = hauteur - hx; y < hauteur; y++) {
+        const col = peindre(x, y, y - (hauteur - hx), hx, pente, hauteur);
+        if (col) { g.fillStyle = col; g.fillRect(x, y, 1, 1); }
+      }
+    }
+    return c;
+  }
+  function construireDecor() {
+    const onde = (k, p) => (x) => Math.sin(2 * Math.PI * (k * x / TUILE + p));
+    const montagnes = tuileRelief(
+      (x) => 18 + 44 * tri(3 * x / TUILE + 0.1) + 24 * tri(7 * x / TUILE + 0.37) + 5 * onde(23, 0)(x), 100,
+      (x, y, prof, hx, pente, hh) => {
+        const neige = hx > 58 && prof < (hx - 58) * 0.55 + Math.floor(hash(x) * 3);
+        const brume = y > hh - 22 && ((x + y) & 1) && y > hh - 22 + hash(x * 7) * 12;
+        if (brume) return '#9a78b6';
+        if (neige) return pente < 0 ? '#f6ecff' : '#b9a6e2';
+        return pente < 0 ? '#7a66b2' : '#58498f';
+      });
+    const collines = tuileRelief(
+      (x) => 20 + 12 * onde(2, 0.5)(x) + 8 * onde(5, 1.7)(x) + 3 * onde(13, 0)(x), 60,
+      (x, y, prof, hx, pente, hh) => {
+        if (prof < 2) return pente < 0 ? '#6b5aa3' : '#4b3f82';
+        if (y > hh - 14 && ((x + y) & 1) && y > hh - 14 + hash(x * 3) * 10) return '#6d5498';
+        return '#3b3270';
+      });
+    // forêt de sapins
+    const foret = toile(TUILE, 56), gf = foret.getContext('2d');
+    gf.fillStyle = '#1d1a3c'; gf.fillRect(0, 46, TUILE, 10);
+    for (let i = 0; i < 46; i++) {
+      const cx = Math.floor(hash(i + 1) * TUILE), h = 16 + Math.floor(hash(i + 9) * 30), l = Math.floor(h * 0.38);
+      for (const dx of [0, -TUILE, TUILE]) {
+        for (let r = 0; r < h; r++) {
+          const y = 50 - r, larg = Math.max(0, Math.floor(l * (1 - r / h) + ((r % 6) < 2 ? 1 : 0)));
+          gf.fillStyle = '#1f1b40'; gf.fillRect(cx + dx - larg, y, larg * 2 + 1, 1);
+          gf.fillStyle = '#2f2960'; gf.fillRect(cx + dx + larg, y, 1, 1);
+        }
+        gf.fillStyle = '#16132e'; gf.fillRect(cx + dx, 50, 1, 6);
+      }
+    }
+    // sol : herbe givrée, terre, cailloux
+    const sol = toile(TUILE, 48), gs = sol.getContext('2d');
+    gs.fillStyle = '#1a2130'; gs.fillRect(0, 0, TUILE, 48);
+    for (let x = 0; x < TUILE; x++) {
+      gs.fillStyle = '#3f6d58'; gs.fillRect(x, 0, 1, 1 + (hash(x) > 0.7 ? 1 : 0));
+      gs.fillStyle = '#2a4a45'; gs.fillRect(x, 2, 1, 1 + (hash(x * 3) > 0.5 ? 1 : 0));
+      if (hash(x * 5.3) > 0.93) { gs.fillStyle = '#6d9c7e'; gs.fillRect(x, 0, 1, 1); }
+      for (let y = 5; y < 48; y += 3) if (hash(x * 13 + y * 7) > 0.9) { gs.fillStyle = '#243044'; gs.fillRect(x, y, 2, 1); }
+    }
+    for (let i = 0; i < 14; i++) {
+      const x = Math.floor(hash(i * 17) * TUILE), y = 8 + Math.floor(hash(i * 29) * 26), w = 3 + Math.floor(hash(i) * 4);
+      gs.fillStyle = '#39455c'; gs.fillRect(x, y, w, 2); gs.fillStyle = '#4d5a73'; gs.fillRect(x, y, w - 1, 1);
+    }
+    // nuages de l'aube (3 tons)
+    const nuages = [0, 1, 2].map((n) => {
+      const w = 60 + n * 18, c = toile(w, 24), g = c.getContext('2d');
+      const bulles = Array.from({ length: 5 + n }, (_, i) => [8 + (w - 16) * (i / (4 + n)), 13 - hash(i + n * 9) * 6, 6 + hash(i * 3 + n) * 5]);
+      for (const [teinte, dy] of [['#a5679a', 2], ['#e094ad', 0], ['#ffd0c2', -2]]) {
+        g.fillStyle = teinte;
+        for (const [bx, by, r] of bulles) for (let y = -Math.floor(r); y <= r; y++) {
+          if (teinte === '#ffd0c2' && y > -r * 0.3) continue;
+          const hw = Math.floor(Math.sqrt(r * r - y * y));
+          g.fillRect(Math.round(bx - hw), Math.round(by + y + dy), hw * 2 + 1, 1);
+        }
+      }
+      return c;
+    });
+    const etoiles = Array.from({ length: 46 }, (_, i) => ({ x: hash(i * 3.7) * 900, y: 4 + hash(i * 9.1) * 70, p: hash(i) * 6 }));
+    DECOR = { montagnes, collines, foret, sol, nuages, etoiles };
+  }
+  const CIEL = ['#161a44', '#1c1f4e', '#232557', '#2c2a60', '#373068', '#44356f', '#533a75', '#653e79',
+                '#79437a', '#8e4878', '#a34f73', '#b7586c', '#c86365', '#d7715f', '#e3835b', '#ec975a',
+                '#f3ad5f', '#f8c26a', '#fbd67d', '#fde69b'];
+  const melange = (a, b, t) => '#' + hexRgb(a).map((v, i) => Math.round(mix(v, hexRgb(b)[i], t)).toString(16).padStart(2, '0')).join('');
+  const CIEL_EAU = CIEL.map((c) => melange(c, '#2b2660', 0.38));
+  function fjord(haut, bas) {
+    // reflet du ciel en miroir, colonne de lumière sous le soleil, reflets qui ondulent (façon HDMA)
+    const bande = Math.ceil(HORIZON / CIEL.length) + 1, sx = Math.round(W * 0.7);
+    for (let y = haut; y < bas; y++) {
+      const r = y - haut, miroir = Math.max(0, HORIZON - 6 - r * 2);
+      ctx.fillStyle = CIEL_EAU[clamp(Math.floor(miroir / bande), 0, CIEL.length - 1)];
+      ctx.fillRect(0, y, W, 1);
+      if (r % 2 === 0) {
+        const w = Math.max(2, Math.round(16 - r * 0.45 + Math.sin(temps * 5 + r * 1.3) * 3));
+        const dx = Math.round(Math.sin(temps * 2.2 + r * 0.9) * 2);
+        ctx.fillStyle = r < 6 ? '#fff0b8' : '#ffd98a';
+        ctx.fillRect(sx - w + dx, y, w * 2, 1);
+      }
+      if (r % 3 === 1) {
+        ctx.fillStyle = '#ffe3a6';
+        const off = Math.round(((cam * 0.2 + r * 37 + Math.sin(temps * 1.4 + r) * 5) % 46 + 46) % 46);
+        for (let x = -off; x < W; x += 46) ctx.fillRect(x + (r * 13) % 23, y, 3 + (r % 4), 1);
+      }
+    }
+  }
+  function tuile(img, facteur, y) {
+    const off = ((cam * facteur) % TUILE + TUILE) % TUILE;
+    for (let x = -Math.floor(off); x < W; x += TUILE) ctx.drawImage(img, x, Math.round(y));
+  }
+  function disque(cx, cy, r, teinte) {
+    ctx.fillStyle = teinte;
+    for (let y = -r; y <= r; y++) {
+      const hw = Math.floor(Math.sqrt(r * r - y * y + r * 0.6));
+      ctx.fillRect(Math.round(cx) - hw, Math.round(cy) + y, hw * 2 + 1, 1);
+    }
+  }
+  function decor() {
+    // ciel en bandes (dégradé façon HDMA)
+    const bande = Math.ceil(HORIZON / CIEL.length) + 1;
+    CIEL.forEach((c, i) => { ctx.fillStyle = c; ctx.fillRect(0, i * bande, W, bande); });
+    ctx.fillStyle = CIEL[CIEL.length - 1]; ctx.fillRect(0, CIEL.length * bande, W, SOL);
+    for (const e of DECOR.etoiles) {
+      const x = Math.round(((e.x - cam * 0.02) % 900 + 900) % 900 - 200);
+      if (x < 0 || x >= W || e.y > HORIZON * 0.5) continue;
+      if (Math.sin(temps * 2 + e.p) > -0.3) { ctx.fillStyle = Math.sin(temps * 3 + e.p) > 0.6 ? '#ffffff' : '#9ea3e6'; ctx.fillRect(x, Math.round(e.y), 1, 1); }
+    }
+    // soleil levant, rayé de bandes de chaleur
+    const sx = Math.round(W * 0.7), sy = HORIZON - 4;
+    disque(sx, sy, 27, '#f7b766'); disque(sx, sy, 24, '#ffd98a'); disque(sx, sy, 20, '#fff0b8');
+    ctx.fillStyle = '#f8c26a';
+    for (let i = 0; i < 4; i++) ctx.fillRect(sx - 30, sy + 4 + i * 5, 61, 1 + (i >> 1));
+    DECOR.nuages.forEach((n, i) => {
+      const larg = W + 240;
+      for (const j of [0, 1]) {
+        const x = ((i * 173 + j * 300 + 40 - cam * (0.05 + i * 0.02) - temps * (3 + i)) % larg + larg) % larg - 120;
+        ctx.drawImage(n, Math.round(x), Math.round(HORIZON * (0.1 + i * 0.15 + j * 0.07)));
+      }
+    });
+    tuile(DECOR.montagnes, 0.1, SOL - 34 - 100);
+    fjord(SOL - 36, SOL - 4);
+    tuile(DECOR.collines, 0.28, SOL - 14 - 60);
+    tuile(DECOR.foret, 0.55, SOL - 52);
+    tuile(DECOR.sol, 1, SOL);
+    if (H - SOL > 48) { ctx.fillStyle = '#1a2130'; ctx.fillRect(0, SOL + 48, W, H - SOL - 48); }
+  }
+
+  // ================= Corbeaux : sprites pixel avec contour =================
+  const CORPS_C = ['XX.......XXX..Xe', '.XXXXXXXXXXXXXXb', '...XXXXXXXXXXX..'];
+  const AILES_C = [
+    ['....XX..........', '.....XXX........', '......XXX.......', '.......XXX......'],
+    ['................', '................', '...XXXX.........', '..XXXXXXXXX.....'],
+    ['................', '................', '................', '.......XX.......'],
+  ];
+  const DESSOUS_C = [['.....X..X.......', '................', '................'], ['.....X..X.......', '................', '................'],
+                     ['.....XXXXX......', '......XXX.......', '.......XX.......']];
+  let CORBEAUX = [];
+  function construireCorbeaux() {
+    CORBEAUX = [0, 1, 2].map((f) => {
+      const lignes = [...AILES_C[f], ...CORPS_C, ...DESSOUS_C[f]];
+      const c = toile(18, lignes.length + 2), g = c.getContext('2d');
+      const plein = (x, y) => !!(lignes[y] && lignes[y][x] && lignes[y][x] !== '.');
+      for (let y = -1; y <= lignes.length; y++) for (let x = -1; x <= 16; x++) {
+        if (plein(x, y)) continue;
+        if ([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => plein(x + dx, y + dy))) { g.fillStyle = ENCRE; g.fillRect(x + 1, y + 1, 1, 1); }
+      }
+      lignes.forEach((l, y) => [...l].forEach((ch, x) => {
+        if (ch === '.') return;
+        g.fillStyle = ch === 'e' ? '#ff4b5c' : ch === 'b' ? '#ffb347' : (plein(x, y - 1) ? '#2a2d4a' : '#454b78');
+        g.fillRect(x + 1, y + 1, 1, 1);
+      }));
+      return c;
+    });
+  }
+
+  // ================= Son : petits bruitages synthétisés (touche M : couper) =================
+  let actx = null, muet = false, bruitBuf = null;
+  try { muet = localStorage.getItem('aile-noire-muet') === '1'; } catch {}
+  function reveillerSon() {
+    if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch { return; } }
+    if (actx.state === 'suspended') actx.resume();
+  }
+  function bruit() {
+    if (!bruitBuf) {
+      bruitBuf = actx.createBuffer(1, actx.sampleRate, actx.sampleRate);
+      const d = bruitBuf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    }
+    const s = actx.createBufferSource(); s.buffer = bruitBuf; return s;
+  }
+  function env(g, t, a, d, v) { g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(v, t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + a + d); }
+  function osc(type, f0, f1, t, d, v, sortie) {
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + d);
+    env(g, t, 0.005, d, v); o.connect(g).connect(sortie); o.start(t); o.stop(t + d + 0.05);
+  }
+  function souffle(filtre, f0, f1, t, d, v, sortie, q = 1) {
+    const s = bruit(), f = actx.createBiquadFilter(), g = actx.createGain();
+    f.type = filtre; f.Q.value = q; f.frequency.setValueAtTime(f0, t); f.frequency.exponentialRampToValueAtTime(f1, t + d);
+    env(g, t, 0.008, d, v); s.connect(f).connect(g).connect(sortie); s.start(t); s.stop(t + d + 0.05);
+  }
+  function sfx(nom) {
+    if (muet || !actx || actx.state !== 'running') return;
+    const t = actx.currentTime, out = actx.createGain();
+    out.gain.value = 0.32; out.connect(actx.destination);
+    switch (nom) {
+      case 'feu': souffle('bandpass', 2200, 380, t, 0.26, 0.9, out, 1.4); osc('square', 320, 90, t, 0.14, 0.12, out); break;
+      case 'boum': souffle('lowpass', 1400, 120, t, 0.38, 1, out); osc('triangle', 180, 40, t, 0.3, 0.4, out); break;
+      case 'aie': osc('square', 560, 120, t, 0.3, 0.22, out); osc('square', 540, 110, t + 0.02, 0.3, 0.12, out); break;
+      case 'ruee': souffle('highpass', 500, 3800, t, 0.28, 0.55, out); break;
+      case 'looping': [523, 659, 784, 1047, 1319].forEach((f, i) => osc('square', f, f, t + i * 0.055, 0.07, 0.1, out)); break;
+      case 'pose': osc('sine', 120, 45, t, 0.18, 0.6, out); souffle('lowpass', 600, 100, t, 0.14, 0.4, out); break;
+      case 'envol': souffle('bandpass', 400, 1400, t, 0.22, 0.5, out, 0.8); break;
+      case 'battement': souffle('lowpass', 420, 160, t, 0.09, 0.22, out); break;
+      case 'combo': osc('square', 988, 988, t, 0.05, 0.09, out); osc('square', 1319, 1319, t + 0.06, 0.08, 0.09, out); break;
+      case 'depart': [392, 523, 659, 784, 1047].forEach((f, i) => osc('square', f, f, t + i * 0.07, 0.09, 0.1, out)); break;
+      case 'chute': osc('square', 440, 55, t, 0.9, 0.16, out); break;
+    }
+  }
+
+  // ================= Entrées : clavier + manette tactile, gestes (double appui) =================
+  const clavier = {}, boutons = {};
+  const tenu = (k) => !!(clavier[k] || boutons[k]);
+  let appuis = new Set(), gestes = new Set();
+  const dernierAppui = {};
+  function appui(k) {
+    reveillerSon();
+    const t = performance.now();
+    if ((k === 'left' || k === 'right' || k === 'up') && t - (dernierAppui[k] || -1e9) < 260) {
+      gestes.add(k === 'up' ? 'looping' : 'ruee-' + k); dernierAppui[k] = -1e9;
+    } else dernierAppui[k] = t;
+    appuis.add(k);
+  }
+  const TOUCHES = {
+    ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down',
+    q: 'left', a: 'left', d: 'right', z: 'up', w: 'up', s: 'down',
+    ' ': 'fire', Spacebar: 'fire', x: 'fire', j: 'fire', Enter: 'fire',
+    c: 'ruee', k: 'ruee', Shift: 'ruee',
+  };
+  let reperes = false, planche = false;
+  addEventListener('keydown', (e) => {
+    const t = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    if (t === 'i') { if (!e.repeat) reperes = !reperes; return; }
+    if (t === 'b') {
+      if (!e.repeat && P) { planche = !planche; popup(planche ? 'ANIM : PLANCHE' : 'ANIM : MARIONNETTE', P.x, P.y - 40, '#9fe3ff'); }
+      return;
+    }
+    if (t === 'm') { if (!e.repeat) basculerSon(); return; }
+    const k = TOUCHES[t];
+    if (!k) return;
+    e.preventDefault();
+    if (!e.repeat) appui(k);
+    clavier[k] = true;
+  });
+  addEventListener('keyup', (e) => { const t = e.key.length === 1 ? e.key.toLowerCase() : e.key; const k = TOUCHES[t]; if (k) clavier[k] = false; });
+  addEventListener('blur', () => { for (const k in clavier) clavier[k] = false; for (const k in boutons) boutons[k] = 0; });
+  document.querySelectorAll('[data-k]').forEach((b) => {
+    const k = b.dataset.k, actifs = new Set();
+    const maj = () => { boutons[k] = actifs.size; b.classList.toggle('on', actifs.size > 0); };
+    b.addEventListener('pointerdown', (e) => { e.preventDefault(); b.setPointerCapture(e.pointerId); appui(k); actifs.add(e.pointerId); maj(); });
+    const fin = (e) => { actifs.delete(e.pointerId); maj(); };
+    b.addEventListener('pointerup', fin); b.addEventListener('pointercancel', fin); b.addEventListener('lostpointercapture', fin);
+    b.addEventListener('contextmenu', (e) => e.preventDefault());
+  });
+  function basculerSon() {
+    muet = !muet;
+    try { localStorage.setItem('aile-noire-muet', muet ? '1' : '0'); } catch {}
+  }
+  cvs.addEventListener('pointerdown', (e) => {
+    reveillerSon();
+    const r = cvs.getBoundingClientRect();
+    const x = (e.clientX - r.left) / r.width * W, y = (e.clientY - r.top) / r.height * H;
+    if (x > W - 22 && y > 20 && y < 38) basculerSon();
+    else if (etat !== 'jeu') appui('fire');
+  });
+
+  // ================= État du jeu =================
+  let etat = 'titre', P = null, corbeaux = [], boules = [], particules = [], popups = [], ombres = [], cam = 0, temps = 0;
+  let score = 0, record = 0, combo = 0, dernierKill = -9, prochain = 2, secousse = 0, gel = 0, finT = 0, tenuBas = false;
+  try { record = +localStorage.getItem('aile-noire-record-snes') || 0; } catch {}
+
+  function joueurNeuf(x) {
+    return {
+      x, y: HORIZON - 20, vx: 0, vy: 0, face: 1, fs: 1, mode: 'air', at: 0,
+      ph: 0, cad: 1.15, amp: 1, plane: 0, replie: 0, haut: 0, pitch: 0, pitchV: 0, queue: 0, queueV: 0, bob: 0,
+      croisiere: 0, atk: -1, tire: false, cd: 0, recul: 0, mal: -1, inv: 0, flash: 0, pv: 3,
+      ruee: -1, rueeDir: [1, 0], rueeCd: 0, loop: -1, loopDir: 1, loopSens: 1, envol: false, charge: 1,
+      accroupi: 0, course: 0, pas: 0, ombreT: 0, impact: 0,
+    };
+  }
+  function nouvellePartie(titre) {
+    etat = titre ? 'titre' : 'jeu';
+    P = joueurNeuf(cam + W * 0.4);
+    corbeaux = []; boules = []; particules = []; popups = []; ombres = [];
+    score = 0; combo = 0; prochain = titre ? 1.2 : 1.6; finT = 0;
+    if (!titre) { sfx('depart'); popup("C'EST PARTI !", P.x, P.y - 34, '#fff0b8', 2); }
+  }
+
+  function popup(txt, x, y, teinte = '#fff6e0', k = 1) { popups.push({ txt, x, y, teinte, k, vie: 1.1 }); }
+  function particule(o) { particules.push(Object.assign({ vx: 0, vy: 0, vie: 0.5, max: 0.5, t: 1, genre: 'braise' }, o)); }
+  function poussiere(x, y, n, force = 1) {
+    for (let i = 0; i < n; i++) particule({ x: x + rand(-18, 18), y: y - rand(0, 3), vx: rand(-60, 60) * force, vy: rand(-26, -4) * force, vie: rand(0.35, 0.7), max: 0.7, t: Math.floor(rand(2, 4)), genre: 'poussiere' });
+  }
+  function explosion(x, y) {
+    particule({ x, y, vie: 0.07, max: 0.07, genre: 'eclair' });
+    particule({ x, y, vie: 0.28, max: 0.28, genre: 'onde' });
+    for (let i = 0; i < 14; i++) { const a = rand(0, 6.28), v = rand(40, 170); particule({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, vie: rand(0.25, 0.55), max: 0.55, t: Math.floor(rand(1, 3)) }); }
+    for (let i = 0; i < 7; i++) particule({ x, y, vx: rand(-80, 80), vy: rand(-110, 10), vie: rand(0.7, 1.2), max: 1.2, t: 2, rot: rand(0, 6), genre: 'plume' });
+    sfx('boum');
+  }
+
+  // ---------- pose des ailes (même profil que outils/animer_ailes.py) ----------
+  function profilAile(ph) {
+    const p = frac(ph), D = RIG.wing.downShare, B = RIG.wing.down;
+    if (p < D) { const u = p / D; return [B + (1 - B) * (1 + Math.cos(Math.PI * u)) / 2, 1 + 0.04 * Math.sin(Math.PI * u), -5 * Math.sin(Math.PI * u)]; }
+    const u = (p - D) / (1 - D);
+    return [B + (1 - B) * (1 - Math.cos(Math.PI * u)) / 2, 1 - 0.14 * Math.sin(Math.PI * u), 7 * Math.sin(Math.PI * u)];
+  }
+  function poseAile(p) {
+    let [s, sx, rot] = profilAile(p.ph);
+    const M = 0.35;
+    s = M + p.amp * (s - M); sx = 1 + p.amp * (sx - 1); rot *= p.amp;
+    s = mix(s, 0.5, p.plane); sx = mix(sx, 1.03, p.plane); rot = mix(rot, -4, p.plane);      // plané : ailes tendues
+    s = mix(s, 0.2, p.replie); sx = mix(sx, 0.6, p.replie); rot = mix(rot, 14, p.replie);    // piqué, ruée : repliées
+    s = mix(s, 1, p.haut); sx = mix(sx, 1, p.haut); rot = mix(rot, -3, p.haut);              // arrondi avant de se poser
+    return { s, sx, rot: rot * Math.PI / 180 };
+  }
+
+  // ---------- actions ----------
+  function cracher() {
+    const rig = !planche && (P.mode === 'air' || P.mode === 'fall');
+    const p = rig ? P.pitch : 0, c = Math.cos(p), s = Math.sin(p);
+    const mx = BOUCHE.x, my = BOUCHE.y + (rig ? P.bob : 0);
+    const bx = P.x + P.face * (mx * c - my * s), by = P.y + (mx * s + my * c);
+    boules.push({ x: bx, y: by, vx: P.face * c * V.BOULE + P.vx * 0.3, vy: s * V.BOULE + P.vy * 0.2, vie: 1.4, trace: [] });
+    for (let i = 0; i < 8; i++) particule({ x: bx, y: by, vx: P.face * rand(40, 180), vy: rand(-60, 60), vie: rand(0.15, 0.3), max: 0.3, t: 1 });
+    P.recul = 1; sfx('feu');
+  }
+  function demarrerRuee(versLeBas) {
+    const auSol = P.mode === 'ground' || P.mode === 'land';
+    if (auSol) {
+      P.mode = 'air'; P.at = 0; P.ph = 0.05; P.amp = 1; P.pitch = -0.2;
+      P.y = GA + AN.land.bodyY[0] * K - 2;
+      poussiere(P.x, SOL, 8, 1.3);
+    }
+    P.ruee = 0; P.rueeCd = 0.55; P.inv = Math.max(P.inv, 0.35); P.atk = -1;
+    P.rueeDir = auSol ? [P.face * 0.94, -0.36] : versLeBas ? [P.face * 0.7, 0.72] : [P.face, 0];
+    popup(versLeBas && !auSol ? 'PIQUÉ !' : 'RUÉE !', P.x, P.y - 34, '#ffe27a');
+    sfx('ruee');
+  }
+  function demarrerLooping(sens) {
+    P.loop = 0; P.loopDir = P.face; P.loopSens = sens; P.inv = Math.max(P.inv, LOOPING.duree + 0.1); P.atk = -1; P.croisiere = 0;
+    popup('LOOPING !', P.x, P.y - 34, '#9fe3ff'); sfx('looping');
+  }
+  function blesser(depuisX) {
+    if (P.inv > 0 || P.pv <= 0 || etat !== 'jeu') return;
+    P.pv--; P.inv = 1.7; P.flash = 0.12; P.atk = -1; P.loop = -1; P.ruee = -1;
+    gel = 0.1; secousse = 0.3; sfx('aie');
+    P.vx = Math.sign(P.x - depuisX || -P.face) * 210;
+    if (P.pv <= 0) {
+      P.mal = -1;
+      if (P.mode === 'ground' || P.mode === 'land') { P.mode = 'dead'; P.at = 0; }
+      else { P.mode = 'fall'; P.at = 0; P.vy = -70; }
+      sfx('chute');
+    } else {
+      P.mal = 0;
+      if (P.mode !== 'air') { P.mode = 'air'; P.at = 0; P.ph = 0; P.pitch = 0; P.y = Math.min(P.y, GA + AN.land.bodyY[0] * K - 2); }
+      P.vy = -95; P.pitchV += Math.random() < 0.5 ? 11 : -11;
+    }
+  }
+  function atterrir() {
+    P.impact = P.vy; P.mode = 'land'; P.at = 0; P.vy = 0; P.pitch = 0; P.pitchV = 0;
+    const fort = P.impact > 170 || P.ruee >= 0;
+    P.ruee = -1;
+    poussiere(P.x - P.face * 10, SOL, fort ? 14 : 6, fort ? 1.5 : 0.8);
+    if (fort) secousse = Math.max(secousse, 0.14);
+    sfx('pose');
+  }
+
+  // ---------- mise à jour du dragon ----------
+  function majDragon(dt, E) {
+    const dir = (E.R ? 1 : 0) - (E.L ? 1 : 0);
+    P.at += dt; P.cd -= dt; P.inv -= dt; P.flash -= dt; P.rueeCd -= dt;
+    P.recul = Math.max(0, P.recul - dt * 5);
+    if (P.mal >= 0) { P.mal += dt; if (P.mal > 0.45) P.mal = -1; }
+    if (P.atk >= 0) {
+      P.atk += dt;
+      if (!P.tire && Math.floor(P.atk * FPS.attack) >= AN.attack.fireFrame) { P.tire = true; cracher(); }
+      if (P.atk * FPS.attack >= AN.attack.frames) P.atk = -1;
+    }
+    const libre = P.mal < 0 && P.pv > 0;
+    const enVol = P.mode === 'air';
+    if ((E.appuis.has('fire') || E.feu) && libre && P.cd <= 0 && P.atk < 0 && P.loop < 0 && (enVol || P.mode === 'ground')) {
+      P.atk = 0; P.tire = false; P.cd = 0.4;
+    }
+    // gestes et bouton de ruée
+    let ruee = E.appuis.has('ruee'), boucle = E.gestes.has('looping');
+    if (E.gestes.has('ruee-left')) { ruee = true; P.face = -1; }
+    if (E.gestes.has('ruee-right')) { ruee = true; P.face = 1; }
+    if (ruee && E.U && enVol) { boucle = true; ruee = false; }
+    if (libre && P.loop < 0 && P.ruee < 0 && (enVol || P.mode === 'ground' || P.mode === 'land')) {
+      const seuilSol = GA + AN.land.bodyY[0] * K;
+      if (boucle && enVol && P.y - 2 * LOOPING.rayon > PLAFOND + 20) demarrerLooping(1);
+      else if (boucle && enVol && P.y + 2 * LOOPING.rayon < seuilSol - 4) demarrerLooping(-1);
+      else if (ruee && P.rueeCd <= 0) demarrerRuee(E.D);
+    }
+    if (libre && dir && P.loop < 0 && P.ruee < 0 && P.atk < 0) P.face = dir;
+    P.fs += clamp(P.face - P.fs, -dt * 12, dt * 12);   // demi-tour animé : le sprite pivote
+
+    switch (P.mode) {
+      case 'air': majVol(dt, E, dir, libre); break;
+      case 'jump': {
+        if (!P.envol && P.at * FPS.jump >= 1) { P.envol = true; P.vy = -V.SAUT * P.charge; poussiere(P.x, SOL, 10, 1.2); sfx('envol'); }
+        if (P.envol) P.vy = approche(P.vy, -40, dt * 3);
+        P.vx = approche(P.vx, libre ? dir * V.AIR : 0, dt * 5);
+        P.x += P.vx * dt; P.y += P.vy * dt;
+        if (P.at * FPS.jump >= AN.jump.frames) {
+          P.mode = 'air'; P.at = 0; P.ph = 0; P.amp = 1; P.cad = 2.2; P.pitch = -0.22; P.pitchV = 0;
+          P.replie = 0; P.plane = 0; P.haut = 0; P.croisiere = 0;
+        }
+        break;
+      }
+      case 'land':
+        P.vx = approche(P.vx, 0, dt * 5); P.x += P.vx * dt;
+        if (P.at * FPS.land >= AN.land.frames) { P.mode = 'ground'; P.at = 0; }
+        break;
+      case 'ground': {
+        const accroupi = libre && E.D && P.atk < 0;
+        P.accroupi = accroupi ? P.accroupi + dt : Math.max(0, P.accroupi - dt * 2);
+        if (libre && E.U && P.atk < 0) {
+          P.charge = P.accroupi > 0.25 ? 1.3 : 1;
+          if (P.charge > 1) popup('SUPER SAUT !', P.x, P.y - 34, '#ffe27a');
+          P.mode = 'jump'; P.at = 0; P.envol = false; P.accroupi = 0;
+          P.y = GA + AN.jump.bodyY[0] * K;
+          break;
+        }
+        P.course = dir && !accroupi && P.atk < 0 ? P.course + dt : 0;
+        const vitesse = mix(V.MARCHE, V.COURSE, clamp((P.course - 0.35) / 0.7, 0, 1));
+        P.vx = approche(P.vx, libre && !accroupi && P.atk < 0 ? dir * vitesse : 0, dt * 8);
+        P.x += P.vx * dt;
+        const avant = Math.floor(P.pas);
+        P.pas += dt * 12 * Math.abs(P.vx) / V.MARCHE;
+        if (Math.floor(P.pas) !== avant && Math.floor(P.pas) % 7 === 3 && Math.abs(P.vx) > V.MARCHE * 1.2) poussiere(P.x - P.face * 26, SOL, 2, 0.5);
+        break;
+      }
+      case 'fall': {
+        P.vy += 620 * dt; P.vx = approche(P.vx, 0, dt);
+        P.x += P.vx * dt; P.y += P.vy * dt;
+        P.amp = approche(P.amp, 0.45, dt * 3); P.cad = 3.2; P.replie = approche(P.replie, 0.35, dt * 3);
+        P.ph += P.cad * dt;
+        P.pitchV += (40 * (1.0 - P.pitch) - 6 * P.pitchV) * dt; P.pitch += P.pitchV * dt;
+        ressortQueue(dt, 0.2);
+        if (P.y >= GA + AN.dead.bodyY[0] * K) { P.mode = 'dead'; P.at = 0; P.pitch = 0; secousse = 0.25; poussiere(P.x, SOL, 16, 1.4); sfx('pose'); }
+        break;
+      }
+      case 'dead':
+        P.vx = approche(P.vx, 0, dt * 6); P.x += P.vx * dt;
+        if (etat === 'jeu' && P.at * FPS.dead >= AN.dead.frames + 5) { etat = 'fin'; finT = 0; }
+        break;
+    }
+    if (P.mode === 'ground' || P.mode === 'land' || P.mode === 'dead') {
+      const v = visuelDragon();
+      P.y = AN[v.an].grounded ? GA + AN[v.an].bodyY[v.i] * K : GA;
+    }
+  }
+  function ressortQueue(dt, cible) {
+    P.queueV += (80 * (cible - P.queue) - 9 * P.queueV) * dt;
+    P.queue += P.queueV * dt;
+  }
+  function majVol(dt, E, dir, libre) {
+    let cAmp = 1, cCad = 1.15, cPlane = 0, cReplie = 0;
+    if (P.loop >= 0) {
+      P.loop += dt;
+      const u = Math.min(1, P.loop / LOOPING.duree), th = u * Math.PI * 2, v = 2 * Math.PI * LOOPING.rayon / LOOPING.duree;
+      P.vx = P.loopDir * Math.cos(th) * v; P.vy = -P.loopSens * Math.sin(th) * v;
+      P.pitch = -P.loopSens * th; P.pitchV = -P.loopSens * 2 * Math.PI / LOOPING.duree;
+      cCad = 2.4;
+      if (u >= 1) { P.loop = -1; P.pitch += P.loopSens * Math.PI * 2; P.pitchV = 0; P.vx = P.loopDir * v * 0.7; P.vy = 0; }
+    } else if (P.ruee >= 0) {
+      P.ruee += dt;
+      const u = P.ruee / 0.3, v = V.RUEE * (1 - 0.45 * u * u);
+      P.vx = P.rueeDir[0] * v; P.vy = P.rueeDir[1] * v;
+      cAmp = 0.1; cCad = 0.6; cReplie = 1;
+      if (u >= 1) { P.ruee = -1; P.vx = P.face * V.AIR * 1.1; P.vy *= 0.3; }
+    } else {
+      const pique = libre && E.D, monte = libre && E.U;
+      P.vx = approche(P.vx, libre ? dir * V.AIR : 0, dt * 4);
+      P.vy = approche(P.vy, pique ? V.PIQUE : monte ? -V.VERT : 0, dt * (pique ? 2.5 : 5));
+      if (P.mal >= 0) { cCad = 3.2; }
+      else if (pique) { cAmp = 0.15; cCad = 0.8; cReplie = clamp((P.vy - 50) / 140, 0, 0.9); }
+      else if (monte) { cCad = 2.3; }
+      else if (Math.abs(P.vx) > V.AIR * 0.6) {
+        P.croisiere += dt;
+        const bat = P.croisiere % 2.6 < 1.5;          // en croisière : quelques battements, puis on plane
+        cAmp = bat ? 0.85 : 0.12; cCad = bat ? 1.7 : 0.7; cPlane = bat ? 0 : 1;
+      } else P.croisiere = 0;
+    }
+    P.x += P.vx * dt; P.y += P.vy * dt;
+    if (P.loop < 0 && P.y < PLAFOND + 18) { P.y = PLAFOND + 18; P.vy = Math.max(0, P.vy); }
+    // arrondi avant de toucher le sol (ailes levées, nez relevé), puis atterrissage
+    const seuil = GA + AN.land.bodyY[0] * K;
+    const arrondi = P.loop < 0 && P.vy > 0 && P.y > seuil - Math.max(18, P.vy * 0.24);
+    P.haut = approche(P.haut, arrondi ? 1 : 0, dt * (arrondi ? 10 : 6));
+    if (arrondi) { cReplie = 0; cAmp = 0.3; }
+    if (P.loop < 0) {
+      const cPitch = clamp(P.vy / V.VERT, -1.4, 1.9) * 0.2 + clamp(P.vx * P.face / V.AIR, -1, 1) * 0.04
+        - P.recul * 0.14 - (arrondi ? 0.14 : 0) + (P.ruee >= 0 ? 0.08 : 0);
+      P.pitchV += (55 * (cPitch - P.pitch) - 10 * P.pitchV) * dt; P.pitch += P.pitchV * dt;
+    }
+    P.amp = approche(P.amp, cAmp, dt * 5); P.cad = approche(P.cad, cCad, dt * 4);
+    P.plane = approche(P.plane, cPlane, dt * 3); P.replie = approche(P.replie, cReplie, dt * (P.ruee >= 0 ? 16 : 6));
+    const avant = frac(P.ph);
+    P.ph += P.cad * dt;
+    if (avant > 0.9 && frac(P.ph) < 0.1 && P.amp > 0.6) sfx('battement');
+    P.bob = -1.3 * P.amp * Math.sin(2 * Math.PI * (frac(P.ph) - 0.2));
+    ressortQueue(dt, P.amp * 0.09 * Math.sin(2 * Math.PI * P.ph - 1.3) + clamp(P.vy / V.VERT, -1.5, 1.8) * 0.1
+      + (P.ruee >= 0 ? 0.14 : 0) - P.pitchV * 0.03);
+    if (P.y >= seuil) {
+      if (P.vy > 15 && P.loop < 0 && P.mal < 0 && P.pv > 0) atterrir();
+      else { P.y = seuil; P.vy = Math.min(P.vy, 0); }
+    }
+    // traînées de vitesse
+    P.ombreT -= dt;
+    if ((P.ruee >= 0 || P.loop >= 0) && P.ombreT <= 0) { P.ombreT = 0.028; ombres.push({ d: descRig(), vie: 0.2 }); }
+  }
+
+  // ---------- ce qui est dessiné ----------
+  function descRig() {
+    return { type: 'rig', x: P.x, y: P.y, fs: P.fs, pitch: P.pitch, bob: P.bob, aile: poseAile(P), queue: P.queue,
+             tete: P.atk >= 0 ? Math.min(Math.floor(P.atk * FPS.attack), AN.attack.frames - 1) : -1, recul: P.recul };
+  }
+  function visuelDragon() {
+    const unique = (a, t, fps) => Math.min(Math.floor(t * fps), AN[a].frames - 1);
+    const planteGA = (an, i) => ({ type: 'planche', an, i, x: P.x, ay: GA, fs: P.fs });
+    if ((P.mode === 'air' || P.mode === 'fall') && planche) {
+      let an, i;
+      if (P.mode === 'fall') { an = 'hurt'; i = AN.hurt.frames - 1; }
+      else if (P.mal >= 0) { an = 'hurt'; i = unique('hurt', P.mal, FPS.hurt); }
+      else if (P.atk >= 0) { an = 'attack'; i = unique('attack', P.atk, FPS.attack); }
+      else { an = Math.abs(P.vx) > 40 ? 'flight' : 'idle'; i = Math.floor(temps * FPS[an]) % AN[an].frames; }
+      return { type: 'planche', an, i, x: P.x, ay: P.y, fs: P.fs };
+    }
+    switch (P.mode) {
+      case 'air': case 'fall': return descRig();
+      case 'jump': { const i = unique('jump', P.at, FPS.jump); return { type: 'planche', an: 'jump', i, x: P.x, ay: P.y - AN.jump.bodyY[i] * K, fs: P.fs }; }
+      case 'land': return planteGA('land', unique('land', P.at, FPS.land));
+      case 'dead': return planteGA('dead', unique('dead', P.at, FPS.dead));
+      default:
+        if (P.atk >= 0) return planteGA('attack', unique('attack', P.atk, FPS.attack));
+        if (P.accroupi > 0.05 && tenuBas) return planteGA('jump', 0);
+        if (Math.abs(P.vx) > 12) return planteGA('walk', Math.floor(P.pas) % AN.walk.frames);
+        return planteGA('land', AN.land.frames - 1);
+    }
+  }
+
+  function dessinerPlanche(d, jeuDeTeintes) {
+    ctx.save();
+    ctx.translate(Math.round(d.x - cam), Math.round(d.ay));
+    ctx.scale(d.fs, 1);
+    ctx.drawImage(PL[jeuDeTeintes], d.i * FW, AN[d.an].row * FH, FW, FH, -AX, -AY, FW, FH);
+    ctx.restore();
+  }
+  function aile(img, w, loin) {
+    ctx.save();
+    if (loin) ctx.translate(LOIN.dx * K, LOIN.dy * K);
+    ctx.translate(EPAULE[0], EPAULE[1]);
+    ctx.rotate(BETA + w.rot);
+    ctx.scale(w.sx * (loin ? LOIN.sx : 1), w.s * (loin ? LOIN.scale : 1));
+    ctx.rotate(-BETA);
+    ctx.translate(-EPAULE[0], -EPAULE[1]);
+    ctx.drawImage(img, -AX, -AY);
+    ctx.restore();
+  }
+  function dessinerRig(d, jeuDeTeintes) {
+    const L = RG[jeuDeTeintes];
+    ctx.save();
+    ctx.translate(Math.round(d.x - cam), Math.round(d.y));
+    ctx.scale(d.fs, 1);
+    ctx.rotate(d.pitch);
+    ctx.translate(-Math.round(d.recul * 3), Math.round(d.bob));
+    aile(L.loin, d.aile, true);
+    ctx.save();
+    ctx.translate(PIVOT_QUEUE[0], PIVOT_QUEUE[1]); ctx.rotate(d.queue); ctx.translate(-PIVOT_QUEUE[0], -PIVOT_QUEUE[1]);
+    ctx.drawImage(L.queue, -AX, -AY);
+    ctx.restore();
+    if (d.tete >= 0) {
+      ctx.drawImage(L.corpsSansTete, -AX, -AY);
+      const [dx, dy] = DECALAGE_TETE[d.tete];
+      ctx.drawImage(L.tetes[d.tete], Math.round(-AX + dx), Math.round(-AY + dy));
+    } else ctx.drawImage(L.corps, -AX, -AY);
+    aile(d.aile.s < 0 ? L.dessous : L.aile, d.aile, false);
+    ctx.restore();
+  }
+  const largeurDemiTour = (fs) => (fs < 0 ? -1 : 1) * (0.3 + 0.7 * Math.abs(fs));
+  function dessiner(d, jeuDeTeintes) {
+    (d.type === 'rig' ? dessinerRig : dessinerPlanche)(Object.assign({}, d, { fs: largeurDemiTour(d.fs) }), jeuDeTeintes);
+  }
+
+  function dessinerDragon() {
+    const d = visuelDragon();
+    // ombre au sol, qui rétrécit avec l'altitude
+    const haut = clamp((SOL - P.y) / (SOL - PLAFOND), 0, 1);
+    const lo = Math.round(46 * (1 - haut * 0.6));
+    ctx.fillStyle = '#10141f';
+    for (let y = 0; y < 3; y++) {
+      const w = Math.round(lo * Math.sqrt(Math.max(0, 1 - ((y - 1) / 1.6) ** 2)));
+      ctx.fillRect(Math.round(P.x - cam + P.fs * 6) - w, SOL + 1 + y, w * 2, 1);
+    }
+    for (const o of ombres) { ctx.globalAlpha = 0.55 * o.vie / 0.2; dessiner(o.d, 'fantome'); }
+    ctx.globalAlpha = 1;
+    const clignote = P.inv > 0 && P.pv > 0 && P.loop < 0 && P.ruee < 0 && P.mal < 0 && Math.floor(temps * 30) % 2;
+    if (!clignote) dessiner(d, P.flash > 0 ? 'blanc' : 'normal');
+    if (reperes) {
+      ctx.fillStyle = '#ff3b3b';
+      ctx.fillRect(Math.round(P.x - cam) - 4, Math.round(P.y), 9, 1); ctx.fillRect(Math.round(P.x - cam), Math.round(P.y) - 4, 1, 9);
+      ctx.fillStyle = '#3bffb0';
+      for (let a = 0; a < 6.28; a += 0.12) ctx.fillRect(Math.round(P.x - cam + P.face * 9 + Math.cos(a) * 44), Math.round(P.y + 5 + Math.sin(a) * 15), 1, 1);
+      texte(`${P.mode} · ${d.type === 'rig' ? 'marionnette' : d.an + ' ' + (d.i + 1)}`.toUpperCase(), 6, H - 12, '#9fe3ff');
+    }
+  }
+
+  // ================= Corbeaux, boules de feu, particules =================
+  function majMonde(dt) {
+    prochain -= dt;
+    if (prochain <= 0 && P.pv > 0 && !CALME) {
+      const tues = score / 100;
+      prochain = Math.max(0.5, 1.6 - tues * 0.025);
+      const nb = Math.random() < 0.25 ? 3 : 1, droite = Math.random() < (P.face > 0 ? 0.75 : 0.25);
+      const y0 = rand(PLAFOND + 14, SOL - 40), v = rand(55, 95) * (1 + Math.min(tues, 40) * 0.012);
+      for (let n = 0; n < nb && corbeaux.length < 10; n++) {
+        const y = clamp(y0 + (n - 1) * 16, PLAFOND + 10, SOL - 28);
+        corbeaux.push({ x: cam + (droite ? W + 30 + n * 22 : -30 - n * 22), y, cy: y, vx: droite ? -v : v, ph: rand(0, 6.28), amp: rand(4, 16), t: rand(0, 1) });
+      }
+    }
+    for (const c of corbeaux) {
+      c.t += dt; c.x += c.vx * dt;
+      c.cy = approche(c.cy, P.y, dt * 0.35);
+      c.y = Math.min(SOL - 20, c.cy + Math.sin(c.t * 2.3 + c.ph) * c.amp);
+    }
+    corbeaux = corbeaux.filter((c) => Math.abs(c.x - (cam + W / 2)) < W + 200);
+
+    for (const b of boules) {
+      b.vie -= dt; b.x += b.vx * dt; b.y += b.vy * dt;
+      b.trace.unshift([b.x, b.y]); if (b.trace.length > 7) b.trace.pop();
+      if (Math.random() < 0.6) particule({ x: b.x, y: b.y, vx: -b.vx * 0.15 + rand(-20, 20), vy: -b.vy * 0.15 + rand(-25, 25), vie: rand(0.12, 0.3), max: 0.3, t: 1 });
+      if (b.y > SOL) { b.vie = 0; explosionSol(b.x); }
+      for (const c of corbeaux) if (!c.mort && Math.hypot(c.x - b.x, c.y - b.y) < 12) { c.mort = true; b.vie = 0; tuer(c); }
+    }
+    boules = boules.filter((b) => b.vie > 0);
+
+    const hx = P.x + P.face * 9, hy = P.y + 5;
+    const fonce = P.ruee >= 0 || P.loop >= 0;
+    for (const c of corbeaux) {
+      if (c.mort || P.pv <= 0) continue;
+      const dx = (c.x - hx) / 50, dy = (c.y - hy) / 21;
+      if (dx * dx + dy * dy < 1) {
+        if (fonce) { c.mort = true; tuer(c); }                       // la ruée et le looping balaient les corbeaux
+        else if (P.inv <= 0) { blesser(c.x); c.mort = true; explosion(c.x, c.y); }
+      }
+    }
+    corbeaux = corbeaux.filter((c) => !c.mort);
+
+    for (const p of particules) {
+      p.vie -= dt; p.x += p.vx * dt; p.y += p.vy * dt;
+      if (p.genre === 'plume') { p.vy += 200 * dt; p.vx *= 0.97; p.rot += dt * 7; }
+      else if (p.genre === 'poussiere') { p.vx *= 0.9; p.vy *= 0.92; }
+      else { p.vx *= 0.93; p.vy *= 0.93; }
+    }
+    particules = particules.filter((p) => p.vie > 0);
+    for (const o of ombres) o.vie -= dt;
+    ombres = ombres.filter((o) => o.vie > 0);
+    for (const p of popups) { p.vie -= dt; p.y -= 22 * dt; }
+    popups = popups.filter((p) => p.vie > 0);
+  }
+  function explosionSol(x) {
+    particule({ x, y: SOL - 2, vie: 0.25, max: 0.25, genre: 'onde' });
+    for (let i = 0; i < 8; i++) particule({ x, y: SOL - 1, vx: rand(-70, 70), vy: rand(-90, -20), vie: rand(0.2, 0.45), max: 0.45, t: Math.floor(rand(1, 3)) });
+  }
+  function tuer(c) {
+    explosion(c.x, c.y);
+    if (etat !== 'jeu') return;
+    combo = temps - dernierKill < 1.3 ? Math.min(combo + 1, 9) : 1;
+    dernierKill = temps;
+    const pts = 100 * combo;
+    score += pts; gel = Math.max(gel, 0.045);
+    popup('+' + pts, c.x, c.y - 10, combo > 1 ? '#ffe27a' : '#fff6e0');
+    if (combo > 1) { popup('COMBO ×' + combo, c.x, c.y - 22, '#ff9f6b'); sfx('combo'); }
+    if (score > record) { record = score; try { localStorage.setItem('aile-noire-record-snes', record); } catch {} }
+  }
+
+  const FEU = ['#fff8d8', '#ffe27a', '#ffb347', '#ff7a3d', '#e2453a', '#8c2f45', '#3c2440'];
+  function dessinerEffets() {
+    for (const c of corbeaux) {
+      const img = CORBEAUX[[0, 1, 2, 1][Math.floor(c.t * 12) % 4]];
+      ctx.save(); ctx.translate(Math.round(c.x - cam), Math.round(c.y) - 6);
+      if (c.vx < 0) ctx.scale(-1, 1);
+      ctx.drawImage(img, -9, 0); ctx.restore();
+    }
+    for (const b of boules) {
+      b.trace.forEach(([tx, ty], k) => { if (k) disque(tx - cam, ty, Math.max(1, 5 - k), FEU[Math.min(6, 2 + k)]); });
+      const x = b.x - cam, f = Math.floor(temps * 20) % 2;
+      disque(x, b.y, 7 + f, '#e2453a'); disque(x, b.y, 5 + f, '#ffb347'); disque(x, b.y, 3, '#fff8d8');
+    }
+    for (const p of particules) {
+      const x = Math.round(p.x - cam), y = Math.round(p.y), k = clamp(p.vie / p.max, 0, 1);
+      if (p.genre === 'braise') { ctx.fillStyle = FEU[Math.min(6, Math.floor((1 - k) * 7))]; ctx.fillRect(x, y, p.t, p.t); }
+      else if (p.genre === 'plume') {
+        ctx.fillStyle = k > 0.3 || Math.floor(temps * 20) % 2 ? '#2a2d4a' : '#454b78';
+        const l = Math.cos(p.rot) > 0 ? 3 : 1;
+        ctx.fillRect(x - l, y, l * 2, 1); ctx.fillRect(x, y - 1, 1, 1);
+      } else if (p.genre === 'poussiere') disque(x, y, Math.round(p.t + (1 - k) * 3), k > 0.5 ? '#c9b8d8' : '#8e7fa6');
+      else if (p.genre === 'eclair') disque(x, y, 9, '#ffffff');
+      else if (p.genre === 'onde') {
+        const r = Math.round(4 + (1 - k) * 16);
+        ctx.fillStyle = k > 0.5 ? '#fff0b8' : '#ffb347';
+        for (let a = 0; a < 6.28; a += 1 / r) ctx.fillRect(Math.round(x + Math.cos(a) * r), Math.round(y + Math.sin(a) * r), 1, 1);
+      }
+    }
+    for (const p of popups) if (p.vie > 0.25 || Math.floor(temps * 20) % 2) texte(p.txt, p.x - cam, p.y, p.teinte, p.k, 'ombre', 'centre');
+  }
+
+  // ================= Interface (dessinée dans l'image, en police pixel) =================
+  const COEUR = ['.XX.XX.', 'XXXXXXX', 'XXXXXXX', '.XXXXX.', '..XXX..', '...X...'];
+  function coeur(x, y, plein) {
+    COEUR.forEach((l, r) => [...l].forEach((c, k) => {
+      if (c !== 'X') return;
+      ctx.fillStyle = plein ? (r === 1 && k < 3 ? '#ffb0b8' : '#ff4b5c') : '#3a3350';
+      ctx.fillRect(x + k, y + r, 1, 1);
+    }));
+  }
+  function hautParleur(x, y) {
+    ctx.fillStyle = '#fff6e0';
+    ctx.fillRect(x, y + 2, 2, 3); ctx.fillRect(x + 2, y + 1, 1, 5); ctx.fillRect(x + 3, y, 1, 7);
+    if (muet) { ctx.fillStyle = '#ff4b5c'; for (let i = 0; i < 5; i++) { ctx.fillRect(x + 5 + i, y + 1 + i, 1, 1); ctx.fillRect(x + 9 - i, y + 1 + i, 1, 1); } }
+    else { ctx.fillRect(x + 5, y + 2, 1, 3); ctx.fillRect(x + 7, y + 1, 1, 5); }
+  }
+  const pad = (n, l) => String(n).padStart(l, '0');
+  const LOGO = ['#fff3c0', '#ffe08a', '#ffc46b', '#ffa552', '#ff8642', '#f2663a', '#d8483a'];
+  function interfaceJeu(dt) {
+    if (etat === 'titre') return ecranTitre();
+    for (let i = 0; i < 3; i++) coeur(6 + i * 9, 6, i < P.pv);
+    texte('SCORE ' + pad(score, 6), W - 6, 6, '#fff6e0', 1, 'ombre', 'droite');
+    texte('RECORD ' + pad(record, 6), W - 6, 16, '#b9a6e2', 1, 'ombre', 'droite');
+    hautParleur(W - 16, 26);
+    if (planche) texte('ANIM : PLANCHE (B)', 6, 17, '#9fe3ff');
+    if (etat === 'fin') {
+      finT += dt;
+      ctx.fillStyle = 'rgba(11,12,24,0.45)'; ctx.fillRect(0, 0, W, H);
+      texte('TOMBÉ AU COMBAT', W / 2, H * 0.3, LOGO, 2, 'contour', 'centre');
+      texte('SCORE ' + pad(score, 6), W / 2, H * 0.3 + 30, '#fff6e0', 1, 'ombre', 'centre');
+      texte('RECORD ' + pad(record, 6), W / 2, H * 0.3 + 42, '#b9a6e2', 1, 'ombre', 'centre');
+      if (Math.floor(temps * 2) % 2) texte('FEU : REJOUER', W / 2, H * 0.3 + 62, '#fff0b8', 1, 'contour', 'centre');
+    }
+  }
+  function ecranTitre() {
+    const k = W > 330 ? 4 : 3, y = Math.max(22, H * 0.11);
+    texte('AILE NOIRE', W / 2, y, LOGO, k, 'contour', 'centre');
+    texte('UN DRAGON · UN CAVALIER · UNE AUBE', W / 2, y + 9 * k + 2, '#e8d9ff', 1, 'ombre', 'centre');
+    if (Math.floor(temps * 1.6) % 2) texte('APPUIE SUR FEU', W / 2, H * 0.46, '#fff0b8', 1, 'contour', 'centre');
+    const l = [
+      '← → VOLER   ↑ MONTER   ↓ PIQUER',
+      'FEU : CRACHER (MAINTENU : RAFALE)',
+      'RUÉE : FONCER   ↑ + RUÉE : LOOPING',
+      '2× ← →  RUÉE      2× ↑  LOOPING',
+      'AU SOL : ↓ ACCROUPI   ↑ SAUTER',
+      'CLAVIER : ESPACE = FEU   C = RUÉE',
+    ];
+    const y0 = Math.round(H * 0.56);
+    ctx.fillStyle = 'rgba(11,12,24,0.6)'; ctx.fillRect(Math.round(W / 2) - 112, y0 - 6, 224, l.length * 11 + 7);
+    l.forEach((s, i) => texte(s, W / 2, y0 + i * 11, '#fff6e0', 1, 'ombre', 'centre'));
+    hautParleur(W - 16, 26);
+  }
+
+  // ================= Démo de l'écran titre (le dragon vole tout seul) =================
+  let demoAvant = 0;
+  function entreesDemo() {
+    const E = { L: false, R: true, U: false, D: false, feu: false, appuis: new Set(), gestes: new Set() };
+    const c0 = demoAvant % 7, c1 = temps % 7;
+    demoAvant = temps;
+    const passe = (t) => (c0 < t && c1 >= t);
+    E.U = P.y > HORIZON - 10 || (c1 > 1 && c1 < 1.6);
+    E.D = P.y < PLAFOND + 40 && !E.U;
+    if (passe(0.5) || passe(2.2) || passe(4.6) || passe(6.3)) E.appuis.add('fire');
+    if (passe(3.4)) E.gestes.add('looping');
+    if (passe(5.5)) E.appuis.add('ruee');
+    return E;
+  }
+
+  // ================= Boucle =================
+  let avant = 0;
+  function boucle(tms) {
+    const dt = Math.min(0.05, (tms - avant) / 1000 || 0);
+    avant = tms;
+    temps += dt;
+    const E = etat === 'titre' ? entreesDemo()
+      : { L: tenu('left'), R: tenu('right'), U: tenu('up'), D: tenu('down'), feu: tenu('fire'), appuis, gestes };
+    tenuBas = E.D;
+    if (etat === 'titre' && (appuis.has('fire') || appuis.has('ruee'))) nouvellePartie(false);
+    else if (etat === 'fin' && finT > 0.6 && appuis.has('fire')) nouvellePartie(false);
+    else if (gel > 0) gel -= dt;                                   // micro-pause à l'impact
+    else {
+      if (etat === 'titre') P.pv = 3;
+      majDragon(dt, E);
+      majMonde(dt);
+      cam = approche(cam, P.x - W * 0.42 + P.face * W * 0.08, dt * 3);
+    }
+    appuis = new Set(); gestes = new Set();
+    secousse = Math.max(0, secousse - dt);
+
+    ctx.save();
+    if (secousse > 0 && !reduit) ctx.translate(Math.round(rand(-2, 2) * secousse * 5), Math.round(rand(-2, 2) * secousse * 5));
+    decor();
+    dessinerDragon();
+    dessinerEffets();
+    ctx.restore();
+    interfaceJeu(dt);
+    requestAnimationFrame(boucle);
+  }
+
+  // lecture seule, pour les tests automatisés (outils de vérification)
+  window.__aileNoire = () => {
+    const v = visuelDragon();
+    return { etat, mode: P.mode, pitch: +P.pitch.toFixed(2), loop: P.loop, ruee: P.ruee, pv: P.pv, score,
+             sx: Math.round(P.x - cam), sy: Math.round(P.y),
+             visuel: v.type === 'rig' ? 'marionnette' : v.an + ' ' + (v.i + 1) };
+  };
+
+  const img = new Image();
+  img.onload = () => {
+    disposer();
+    PL = construirePlanches(img);
+    RG = { normal: construireRig(PL.normal, true), blanc: construireRig(PL.blanc, false), fantome: construireRig(PL.fantome, false) };
+    construireDecor();
+    construireCorbeaux();
+    nouvellePartie(true);
+    requestAnimationFrame((t) => { avant = t; requestAnimationFrame(boucle); });
+  };
+  img.onerror = () => {
+    disposer();
+    ctx.fillStyle = ENCRE; ctx.fillRect(0, 0, W, H);
+    texte('PLANCHE DU DRAGON INTROUVABLE', W / 2, H / 2 - 6, '#ff9f6b', 1, 'ombre', 'centre');
+    texte('RECONSTRUIRE : OUTILS/CONSTRUIRE_JEU.PY', W / 2, H / 2 + 8, '#fff6e0', 1, 'ombre', 'centre');
+  };
+  img.src = SHEET;
+})();
+</script>
