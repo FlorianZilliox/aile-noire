@@ -1,0 +1,63 @@
+{
+ "image": "dragon_propre.png",
+ "frameWidth": 184,
+ "frameHeight": 88,
+ "anchor": {
+  "x": 78,
+  "y": 50
+ },
+ "groundOffset": 24.5,
+ "palette": [
+  "#07060b",
+  "#141018",
+  "#1e1824",
+  "#2a2231",
+  "#3a3043",
+  "#524659",
+  "#766a7d",
+  "#a79daf",
+  "#e6e0dc"
+ ],
+ "animations": {
+  "idle": {
+   "row": 0,
+   "frames": 6,
+   "grounded": false
+  },
+  "attack": {
+   "row": 1,
+   "frames": 6,
+   "grounded": false
+  },
+  "hurt": {
+   "row": 2,
+   "frames": 4,
+   "grounded": false
+  },
+  "dead": {
+   "row": 3,
+   "frames": 4,
+   "grounded": true
+  },
+  "flight": {
+   "row": 4,
+   "frames": 7,
+   "grounded": false
+  },
+  "jump": {
+   "row": 5,
+   "frames": 7,
+   "grounded": true
+  },
+  "walk": {
+   "row": 6,
+   "frames": 7,
+   "grounded": true
+  },
+  "land": {
+   "row": 7,
+   "frames": 8,
+   "grounded": true
+  }
+ }
+}

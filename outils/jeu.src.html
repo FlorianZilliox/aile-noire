@@ -97,9 +97,9 @@
 <script>
 (() => {
   'use strict';
-  // Planche générée par outils/extraire_sprites.py + outils/animer_ailes.py (grille, ancre, marionnette).
-  const META = /*SPRITE_META*/null;
-  const SHEET = "data:image/png;base64,/*SPRITE_DATA*/";
+  // Dragon redessiné par pixel_artist/pixel_artist.py : pièces articulées (atlas) et leur description.
+  const PIXEL = /*PIXEL_META*/null;
+  const ATLAS = "data:image/png;base64,/*PIXEL_DATA*/";
 
   // ================= Outils =================
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -115,22 +115,19 @@
   const romain = (n) => ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'][n - 1] || String(n);
 
   // ================= Constantes =================
-  const AN = META.animations, RIG = META.rig;
-  const K = 0.5;                                    // les sprites sont affichés en demi-résolution
-  const FW = Math.round(META.frameWidth * K), FH = Math.round(META.frameHeight * K);
-  const AX = Math.round(META.anchor.x * K), AY = Math.round(META.anchor.y * K);
-  const G = META.groundOffset * K;
-  const BOUCHE = { x: META.mouth.x * K, y: META.mouth.y * K };
+  const POSES = PIXEL.poses;                        // vol, sol, gisant : les poses de base redessinées
+  const G = POSES.sol.sol - POSES.sol.ancre[1];     // du corps au bout des pattes, en pose au sol
   const PV_MAX = 5;
   const V = { AIR: 170, VERT: 118, PIQUE: 215, MARCHE: 85, COURSE: 150, SAUT: 270, RUEE: 430, BOULE: 390 };
-  const FPS = { attack: 16, jump: 14, land: 16, dead: 6, hurt: 10, idle: 8, flight: 12 };
+  const FOULEE = 58;                                // px parcourus par cycle de pas
+  const T_ATTAQUE = 0.36, T_ELAN = 0.12, T_RECEPTION = 0.28;
+  const LOIN = { dx: 2.5, dy: -1.5, sx: 0.95, s: 0.92 };   // l'aile opposée, derrière le corps
+  const DESCENTE = 0.45, S_BAS = -0.8;             // profil du battement (voir outils/animer_ailes.py)
   const reduit = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   // palette gothique : nuit violette, os, cendre, sang. Le feu est la seule lumière chaude.
   const ENCRE = '#07060b', OS = '#d8d0c4', OS2 = '#a89f95', CENDRE = '#6b5a64', BRUME = '#8c7c83';
   const SANG = '#7a1c26', SANG_VIF = '#b8323a';
-  const RAMPE = ['#050407', '#0b0910', '#110e17', '#18141f', '#201a28', '#292232', '#332b3d', '#3e3549',
-                 '#4b4156', '#5a5065', '#6c6276', '#827889', '#9c93a1', '#bdb6bf', '#e6e0dc'];
   const CIEL_NUIT = ['#07060b', '#0a080f', '#0e0b14', '#130f1a', '#181320', '#1e1726', '#251b2c', '#2e2032',
                      '#382436', '#442839', '#522c3b', '#5e2f3c'];
   const CIEL_ECLAIR = CIEL_NUIT.map((c) => melange(c, '#9a8fa6', 0.55));
@@ -268,14 +265,8 @@
     ctx.drawImage(c, Math.round(lx), Math.round(y - 2 * k));
   }
 
-  // ================= Planche du dragon : demi-résolution, palette 15 teintes, transparence nette =================
-  let PL = null, RG = null;   // PL[jeu de teintes] = planche ; RG[jeu de teintes] = pièces de la marionnette
-  function durcir(c) {
-    const g = c.getContext('2d'), d = g.getImageData(0, 0, c.width, c.height), p = d.data;
-    for (let i = 3; i < p.length; i += 4) p[i] = p[i] < 128 ? 0 : 255;
-    g.putImageData(d, 0, 0);
-    return c;
-  }
+  // ================= Le dragon : pièces redessinées par Pixel Artist =================
+  let PIECES = null;   // PIECES[jeu de teintes][pose] = calques triés du fond vers l'avant
   function silhouette(src, teinte) {
     const c = toile(src.width, src.height), g = c.getContext('2d');
     g.drawImage(src, 0, 0);
@@ -283,62 +274,42 @@
     g.fillStyle = teinte; g.fillRect(0, 0, c.width, c.height);
     return c;
   }
-  function assombrir(src, f) {
+  // chaque couleur de la palette → la couleur de la palette la plus proche de (couleur × f)
+  function reteinter(src, f) {
+    const pal = PIXEL.palette.map(hexRgb);
+    const table = new Map(pal.map((c) => {
+      const cible = c.map((v) => Math.min(255, v * f));
+      let best = c, bd = Infinity;
+      for (const q of pal) { const d = (q[0] - cible[0]) ** 2 + (q[1] - cible[1]) ** 2 + (q[2] - cible[2]) ** 2; if (d < bd) { bd = d; best = q; } }
+      return [c.join(','), best];
+    }));
     const c = toile(src.width, src.height), g = c.getContext('2d');
     g.drawImage(src, 0, 0);
     const d = g.getImageData(0, 0, c.width, c.height), p = d.data;
-    for (let i = 0; i < p.length; i += 4) { p[i] *= f; p[i + 1] *= f; p[i + 2] *= f; }
+    for (let i = 0; i < p.length; i += 4) {
+      const q = p[i + 3] && table.get(p[i] + ',' + p[i + 1] + ',' + p[i + 2]);
+      if (q) { p[i] = q[0]; p[i + 1] = q[1]; p[i + 2] = q[2]; }
+    }
     g.putImageData(d, 0, 0);
     return c;
   }
-  function construirePlanches(img) {
-    const w = Math.round(img.width * K), h = Math.round(img.height * K);
-    const c = toile(w, h), g = c.getContext('2d');
-    g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
-    g.drawImage(img, 0, 0, w, h);
-    const d = g.getImageData(0, 0, w, h), p = d.data, R = RAMPE.map(hexRgb), n = R.length - 1;
-    for (let i = 0; i < p.length; i += 4) {
-      if (p[i + 3] < 110) { p[i] = p[i + 1] = p[i + 2] = p[i + 3] = 0; continue; }
-      const l = (p[i] * 0.3 + p[i + 1] * 0.59 + p[i + 2] * 0.11) / 255;
-      const [r, gg, b] = R[Math.min(n, Math.round(Math.pow(l, 0.92) * n))];
-      p[i] = r; p[i + 1] = gg; p[i + 2] = b; p[i + 3] = 255;
+  function construirePieces(atlas) {
+    const jeux = { normal: null, blanc: '#ffffff', fantome: '#6a5a8a', contour: '#46384f' }, out = {};
+    for (const [jeu, teinte] of Object.entries(jeux)) {
+      out[jeu] = {};
+      for (const [nom, pose] of Object.entries(POSES)) {
+        const [ax, ay] = pose.ancre, rel = (q) => [q[0] - ax, q[1] - ay];
+        out[jeu][nom] = pose.calques.map((c) => {
+          const [x, y, w, h] = c.atlas, base = toile(w, h);
+          base.getContext('2d').drawImage(atlas, x, y, w, h, 0, 0, w, h);
+          const img = teinte ? silhouette(base, teinte) : base;
+          return { ...c, img, loin: teinte ? img : reteinter(base, 0.55), dessous: teinte ? img : reteinter(base, 1.2),
+                   o: rel(c.origine), p: c.pivot ? rel(c.pivot) : [0, 0], a: c.axe ? rel(c.axe) : null, avant: /avant/.test(c.nom) };
+        }).sort((a, b) => a.z - b.z);
+      }
     }
-    g.putImageData(d, 0, 0);
-    return { normal: c, blanc: silhouette(c, '#ffffff'), fantome: silhouette(c, '#6a5a8a'), contour: silhouette(c, '#46384f') };
+    return out;
   }
-  const rel = ([x, y]) => [x * K, y * K];
-  function chemin(g, poly) {
-    g.beginPath();
-    poly.forEach((pt, i) => { const [x, y] = rel(pt); i ? g.lineTo(x + AX, y + AY) : g.moveTo(x + AX, y + AY); });
-    g.closePath();
-  }
-  function piece(src, anim, image, garder, effacer = []) {
-    const c = toile(FW, FH), g = c.getContext('2d');
-    if (garder) { g.save(); chemin(g, garder); g.clip(); }
-    g.drawImage(src, image * FW, AN[anim].row * FH, FW, FH, 0, 0, FW, FH);
-    if (garder) g.restore();
-    g.globalCompositeOperation = 'destination-out';
-    for (const e of effacer) { chemin(g, e); g.fill(); }
-    return durcir(c);
-  }
-  function construireRig(src, normal) {
-    const { anim, frame } = RIG.ref;
-    const aile = piece(src, anim, frame, RIG.wing.poly);
-    return {
-      aile,
-      dessous: normal ? assombrir(aile, RIG.wing.under) : aile,
-      loin: normal ? assombrir(aile, RIG.wing.far.shade) : aile,
-      queue: piece(src, anim, frame, RIG.tail.poly, [RIG.wing.poly]),
-      corps: piece(src, anim, frame, null, [RIG.wing.poly, RIG.tail.cut]),
-      corpsSansTete: piece(src, anim, frame, null, [RIG.wing.poly, RIG.tail.cut, RIG.head.erase]),
-      tetes: RIG.head.frames.map((t) => piece(src, t.anim, t.frame, RIG.head.poly)),
-    };
-  }
-  const EPAULE = rel(RIG.wing.hinge[1]);
-  const BETA = Math.atan2(RIG.wing.hinge[1][1] - RIG.wing.hinge[0][1], RIG.wing.hinge[1][0] - RIG.wing.hinge[0][0]);
-  const LOIN = RIG.wing.far;
-  const PIVOT_QUEUE = rel(RIG.tail.pivot);
-  const DECALAGE_TETE = RIG.head.frames.map((t) => [t.dx * K, t.dy * K]);
 
   // ================= Décors : tuiles pixel pré-calculées, un décor par acte =================
   const T = 512;
@@ -779,14 +750,10 @@
     q: 'left', a: 'left', d: 'right', z: 'up', w: 'up', s: 'down',
     x: 'fire', ' ': 'fire', Spacebar: 'fire', Enter: 'fire', c: 'ruee',
   };
-  let reperes = false, planche = false;
+  let reperes = false;
   addEventListener('keydown', (e) => {
     const t = e.key.length === 1 ? e.key.toLowerCase() : e.key;
     if (t === 'i') { if (!e.repeat) reperes = !reperes; return; }
-    if (t === 'p') {
-      if (!e.repeat && P) { planche = !planche; popup(planche ? 'ANIM : PLANCHE' : 'ANIM : MARIONNETTE', P.x, P.y - 40, '#9fb4c8'); }
-      return;
-    }
     if (t === 'm') { if (!e.repeat) basculerSon(); return; }
     const k = TOUCHES[t];
     if (!k) return;
@@ -827,7 +794,8 @@
       x, y: HORIZON - 30, vx: 0, vy: 0, face: 1, fs: 1, mode: 'air', at: 0,
       ph: 0, cad: 1.15, amp: 1, plane: 0, replie: 0, haut: 0, pitch: 0, pitchV: 0, queue: 0, queueV: 0, bob: 0,
       croisiere: 0, atk: -1, tire: false, cd: 0, recul: 0, mal: -1, inv: 0, flash: 0, pv: PV_MAX,
-      ruee: -1, rueeDir: [1, 0], rueeCd: 0, envol: false, charge: 1, accroupi: 0, course: 0, pas: 0, ombreT: 0, impact: 0,
+      ruee: -1, rueeDir: [1, 0], rueeCd: 0, charge: 1, elan: 0, accroupi: 0, course: 0, pas: 0, ombreT: 0, impact: 0,
+      rebond: 0, rebondV: 0,
     };
   }
   function vider() { ennemis = []; boules = []; orbes = []; coeurs = []; particules = []; popups = []; ombres = []; }
@@ -888,12 +856,12 @@
     sfx('boum');
   }
 
-  // ---------- pose des ailes (même profil que outils/animer_ailes.py) ----------
+  // ---------- battement d'ailes (même profil que outils/animer_ailes.py) ----------
   function profilAile(ph) {
-    const p = frac(ph), D = RIG.wing.downShare, B = RIG.wing.down;
-    if (p < D) { const u = p / D; return [B + (1 - B) * (1 + Math.cos(Math.PI * u)) / 2, 1 + 0.04 * Math.sin(Math.PI * u), -5 * Math.sin(Math.PI * u)]; }
-    const u = (p - D) / (1 - D);
-    return [B + (1 - B) * (1 - Math.cos(Math.PI * u)) / 2, 1 - 0.14 * Math.sin(Math.PI * u), 7 * Math.sin(Math.PI * u)];
+    const p = frac(ph);
+    if (p < DESCENTE) { const u = p / DESCENTE; return [S_BAS + (1 - S_BAS) * (1 + Math.cos(Math.PI * u)) / 2, 1 + 0.04 * Math.sin(Math.PI * u), -5 * Math.sin(Math.PI * u)]; }
+    const u = (p - DESCENTE) / (1 - DESCENTE);
+    return [S_BAS + (1 - S_BAS) * (1 - Math.cos(Math.PI * u)) / 2, 1 - 0.14 * Math.sin(Math.PI * u), 7 * Math.sin(Math.PI * u)];
   }
   function poseAile(p) {
     let [s, sx, rot] = profilAile(p.ph);
@@ -906,25 +874,27 @@
   }
 
   // ---------- actions du dragon ----------
+  const auSol = () => P.mode === 'ground' || P.mode === 'land' || P.mode === 'jump';
+  function boucheMonde() {
+    const d = posture(), b = POSES[d.pose].bouche, [ax, ay] = POSES[d.pose].ancre;
+    if (!b) return [P.x + P.face * 40, d.y];
+    const mx = b[0] - ax + d.tete.dx + d.corps.dx, my = b[1] - ay + d.tete.dy + d.corps.dy;
+    const c = Math.cos(d.pitch), s = Math.sin(d.pitch);
+    return [P.x + P.face * (mx * c - my * s), d.y + (mx * s + my * c)];
+  }
   function cracher() {
-    const rig = !planche && (P.mode === 'air' || P.mode === 'fall');
-    const p = rig ? P.pitch : 0, c = Math.cos(p), s = Math.sin(p);
-    const mx = BOUCHE.x, my = BOUCHE.y + (rig ? P.bob : 0);
-    const bx = P.x + P.face * (mx * c - my * s), by = P.y + (mx * s + my * c);
+    const [bx, by] = boucheMonde(), p = P.mode === 'air' ? P.pitch : 0, c = Math.cos(p), s = Math.sin(p);
     boules.push({ x: bx, y: by, vx: P.face * c * V.BOULE + P.vx * 0.3, vy: s * V.BOULE + P.vy * 0.2, vie: 1.3, trace: [] });
-    for (let i = 0; i < 8; i++) particule({ x: bx, y: by, vx: P.face * rand(40, 180), vy: rand(-60, 60), vie: rand(0.15, 0.3), max: 0.3, t: 1 });
+    for (let i = 0; i < 10; i++) particule({ x: bx, y: by, vx: P.face * rand(40, 200), vy: rand(-60, 60), vie: rand(0.15, 0.3), max: 0.3, t: 1 });
+    particule({ x: bx + P.face * 3, y: by, vie: 0.07, max: 0.07, genre: 'bouche' });
     P.recul = 1; sfx('feu');
   }
   function demarrerRuee(versLeBas) {
-    const auSol = P.mode === 'ground' || P.mode === 'land';
-    if (auSol) {
-      P.mode = 'air'; P.at = 0; P.ph = 0.05; P.amp = 1; P.pitch = -0.2;
-      P.y = GA + AN.land.bodyY[0] * K - 2;
-      poussiere(P.x, SOL, 8, 1.3);
-    }
+    const depuisLeSol = auSol();
+    if (depuisLeSol) { P.mode = 'air'; P.at = 0; P.ph = 0.05; P.amp = 1; P.pitch = -0.2; P.y = GA - 2; poussiere(P.x, SOL, 8, 1.3); }
     P.ruee = 0; P.rueeCd = 0.55; P.inv = Math.max(P.inv, 0.35); P.atk = -1;
-    P.rueeDir = auSol ? [P.face * 0.94, -0.36] : versLeBas ? [P.face * 0.7, 0.72] : [P.face, 0];
-    popup(versLeBas && !auSol ? 'PIQUÉ !' : 'RUÉE !', P.x, P.y - 34, OS);
+    P.rueeDir = depuisLeSol ? [P.face * 0.94, -0.36] : versLeBas ? [P.face * 0.7, 0.72] : [P.face, 0];
+    popup(versLeBas && !depuisLeSol ? 'PIQUÉ !' : 'RUÉE !', P.x, P.y - 34, OS);
     sfx('ruee');
   }
   function blesser(depuisX) {
@@ -934,17 +904,17 @@
     P.vx = Math.sign(P.x - depuisX || -P.face) * 170;
     if (P.pv <= 0) {
       P.mal = -1;
-      if (P.mode === 'ground' || P.mode === 'land') { P.mode = 'dead'; P.at = 0; }
+      if (auSol()) { P.mode = 'dead'; P.at = 0; P.rebond = -4; P.rebondV = 0; }
       else { P.mode = 'fall'; P.at = 0; P.vy = -70; }
       sfx('chute');
     } else {
       P.mal = 0;
-      if (P.mode !== 'air') { P.mode = 'air'; P.at = 0; P.ph = 0; P.pitch = 0; P.y = Math.min(P.y, GA + AN.land.bodyY[0] * K - 2); }
+      if (P.mode !== 'air') { P.mode = 'air'; P.at = 0; P.ph = 0; P.pitch = 0; P.y = Math.min(P.y, GA - 2); }
       P.vy = -80; P.pitchV += Math.random() < 0.5 ? 9 : -9;
     }
   }
   function atterrir() {
-    P.impact = P.vy; P.mode = 'land'; P.at = 0; P.vy = 0; P.pitch = 0; P.pitchV = 0;
+    P.impact = P.vy; P.mode = 'land'; P.at = 0; P.vy = 0; P.pitch = 0; P.pitchV = 0; P.y = GA;
     const fort = P.impact > 170 || P.ruee >= 0;
     P.ruee = -1;
     poussiere(P.x - P.face * 10, SOL, fort ? 14 : 6, fort ? 1.5 : 0.8);
@@ -960,8 +930,8 @@
     if (P.mal >= 0) { P.mal += dt; if (P.mal > 0.45) P.mal = -1; }
     if (P.atk >= 0) {
       P.atk += dt;
-      if (!P.tire && Math.floor(P.atk * FPS.attack) >= AN.attack.fireFrame) { P.tire = true; cracher(); }
-      if (P.atk * FPS.attack >= AN.attack.frames) P.atk = -1;
+      if (!P.tire && P.atk >= 0.1) { P.tire = true; cracher(); }
+      if (P.atk >= T_ATTAQUE) P.atk = -1;
     }
     const libre = P.mal < 0 && P.pv > 0;
     const enVol = P.mode === 'air';
@@ -971,26 +941,24 @@
     let ruee = E.appuis.has('ruee');
     if (E.gestes.has('ruee-left')) { ruee = true; P.face = -1; }
     if (E.gestes.has('ruee-right')) { ruee = true; P.face = 1; }
-    if (libre && ruee && P.ruee < 0 && P.rueeCd <= 0 && (enVol || P.mode === 'ground' || P.mode === 'land')) demarrerRuee(E.D);
+    if (libre && ruee && P.ruee < 0 && P.rueeCd <= 0 && (enVol || auSol())) demarrerRuee(E.D);
     if (libre && dir && P.ruee < 0 && P.atk < 0) P.face = dir;
     P.fs += clamp(P.face - P.fs, -dt * 12, dt * 12);   // demi-tour animé
 
     switch (P.mode) {
       case 'air': majVol(dt, E, dir, libre); break;
-      case 'jump': {
-        if (!P.envol && P.at * FPS.jump >= 1) { P.envol = true; P.vy = -V.SAUT * P.charge; poussiere(P.x, SOL, 10, 1.2); sfx('envol'); }
-        if (P.envol) P.vy = approche(P.vy, -40, dt * 3);
-        P.vx = approche(P.vx, libre ? dir * V.AIR : 0, dt * 5);
-        P.x += P.vx * dt; P.y += P.vy * dt;
-        if (P.at * FPS.jump >= AN.jump.frames) {
-          P.mode = 'air'; P.at = 0; P.ph = 0; P.amp = 1; P.cad = 2.2; P.pitch = -0.22; P.pitchV = 0;
+      case 'jump':          // élan : le dragon s'accroupit un instant, puis décolle d'un coup d'ailes
+        P.vx = approche(P.vx, 0, dt * 8); P.x += P.vx * dt;
+        if (P.at >= T_ELAN) {
+          P.mode = 'air'; P.at = 0; P.vy = -V.SAUT * P.charge; P.elan = 0.3 * P.charge; P.y = GA - 1;
+          P.ph = 0.02; P.amp = 1; P.cad = 2.4; P.pitch = -0.25; P.pitchV = 0;
           P.replie = 0; P.plane = 0; P.haut = 0; P.croisiere = 0;
+          poussiere(P.x, SOL, 12, 1.3); sfx('envol');
         }
         break;
-      }
       case 'land':
         P.vx = approche(P.vx, 0, dt * 5); P.x += P.vx * dt;
-        if (P.at * FPS.land >= AN.land.frames) { P.mode = 'ground'; P.at = 0; }
+        if (P.at >= T_RECEPTION) { P.mode = 'ground'; P.at = 0; }
         break;
       case 'ground': {
         const accroupi = libre && E.D && P.atk < 0;
@@ -998,17 +966,16 @@
         if (libre && E.U && P.atk < 0) {
           P.charge = P.accroupi > 0.25 ? 1.3 : 1;
           if (P.charge > 1) popup('SUPER SAUT !', P.x, P.y - 34, OS);
-          P.mode = 'jump'; P.at = 0; P.envol = false; P.accroupi = 0;
-          P.y = GA + AN.jump.bodyY[0] * K;
+          P.mode = 'jump'; P.at = 0; P.accroupi = 0;
           break;
         }
         P.course = dir && !accroupi && P.atk < 0 ? P.course + dt : 0;
         const vitesse = mix(V.MARCHE, V.COURSE, clamp((P.course - 0.35) / 0.7, 0, 1));
         P.vx = approche(P.vx, libre && !accroupi && P.atk < 0 ? dir * vitesse : 0, dt * 8);
         P.x += P.vx * dt;
-        const avant = Math.floor(P.pas);
-        P.pas += dt * 12 * Math.abs(P.vx) / V.MARCHE;
-        if (Math.floor(P.pas) !== avant && Math.floor(P.pas) % 7 === 3 && Math.abs(P.vx) > V.MARCHE * 1.2) poussiere(P.x - P.face * 26, SOL, 2, 0.5);
+        const avant = P.pas;
+        P.pas += dt * Math.abs(P.vx) / FOULEE;
+        if (Math.floor(avant * 2) !== Math.floor(P.pas * 2) && Math.abs(P.vx) > V.MARCHE * 1.2) poussiere(P.x - P.face * 26, SOL, 2, 0.5);
         break;
       }
       case 'fall': {
@@ -1018,17 +985,19 @@
         P.ph += P.cad * dt;
         P.pitchV += (40 * (0.9 - P.pitch) - 6 * P.pitchV) * dt; P.pitch += P.pitchV * dt;
         ressortQueue(dt, 0.2);
-        if (P.y >= GA + AN.dead.bodyY[0] * K) { P.mode = 'dead'; P.at = 0; P.pitch = 0; secousse = 0.25; poussiere(P.x, SOL, 16, 1.4); sfx('pose'); }
+        if (P.y >= GA) { P.y = GA; P.mode = 'dead'; P.at = 0; P.pitch = 0; P.rebond = -4; P.rebondV = 0; secousse = 0.25; poussiere(P.x, SOL, 16, 1.4); sfx('pose'); }
         break;
       }
       case 'dead':
         P.vx = approche(P.vx, 0, dt * 6); P.x += P.vx * dt;
-        if (etat === 'jeu' && P.at * FPS.dead >= AN.dead.frames + 5) { etat = 'fin'; finT = 0; }
+        P.rebondV += (140 * (0 - P.rebond) - 10 * P.rebondV) * dt; P.rebond += P.rebondV * dt;   // petit rebond à terre
+        if (etat === 'jeu' && P.at >= 1.6) { etat = 'fin'; finT = 0; }
         break;
     }
-    if (P.mode === 'ground' || P.mode === 'land' || P.mode === 'dead') {
-      const v = visuelDragon();
-      P.y = AN[v.an].grounded ? GA + AN[v.an].bodyY[v.i] * K : GA;
+    if (auSol() || P.mode === 'dead') {
+      P.y = GA;
+      const marche = Math.min(1, Math.abs(P.vx) / V.MARCHE);
+      ressortQueue(dt, marche > 0.1 ? 0.12 * marche * Math.sin(2 * Math.PI * P.pas + 1) : 0.05 * Math.sin(temps * 1.7));
     }
     // bornes : pas de retour vers l'acte précédent ; l'arène du Veilleur est close
     if (etat === 'jeu') {
@@ -1043,6 +1012,7 @@
   }
   function majVol(dt, E, dir, libre) {
     let cAmp = 1, cCad = 1.15, cPlane = 0, cReplie = 0;
+    P.elan = Math.max(0, P.elan - dt);
     if (P.ruee >= 0) {
       P.ruee += dt;
       const u = P.ruee / 0.3, v = V.RUEE * (1 - 0.45 * u * u);
@@ -1050,9 +1020,9 @@
       cAmp = 0.1; cCad = 0.6; cReplie = 1;
       if (u >= 1) { P.ruee = -1; P.vx = P.face * V.AIR * 1.1; P.vy *= 0.3; }
     } else {
-      const pique = libre && E.D, monte = libre && E.U;
+      const pique = libre && E.D && P.elan <= 0, monte = libre && (E.U || P.elan > 0);
       P.vx = approche(P.vx, libre ? dir * V.AIR : 0, dt * 4);
-      P.vy = approche(P.vy, pique ? V.PIQUE : monte ? -V.VERT : 0, dt * (pique ? 2.5 : 5));
+      P.vy = approche(P.vy, pique ? V.PIQUE : monte ? -V.VERT * (P.elan > 0 ? 1.6 : 1) : 0, dt * (pique ? 2.5 : 5));
       if (P.mal >= 0) cCad = 3.2;
       else if (pique) { cAmp = 0.15; cCad = 0.8; cReplie = clamp((P.vy - 50) / 140, 0, 0.9); }
       else if (monte) cCad = 2.3;
@@ -1065,8 +1035,7 @@
     P.x += P.vx * dt; P.y += P.vy * dt;
     if (P.y < PLAFOND + 18) { P.y = PLAFOND + 18; P.vy = Math.max(0, P.vy); }
     // arrondi avant de toucher le sol (ailes levées, nez relevé), puis atterrissage
-    const seuil = GA + AN.land.bodyY[0] * K;
-    const arrondi = P.vy > 0 && P.y > seuil - Math.max(18, P.vy * 0.24);
+    const arrondi = P.vy > 0 && P.y > GA - Math.max(18, P.vy * 0.24);
     P.haut = approche(P.haut, arrondi ? 1 : 0, dt * (arrondi ? 10 : 6));
     if (arrondi) { cReplie = 0; cAmp = 0.3; }
     const cPitch = clamp(clamp(P.vy / V.VERT, -1.4, 1.9) * 0.18 + clamp(P.vx * P.face / V.AIR, -1, 1) * 0.04
@@ -1080,86 +1049,87 @@
     P.bob = -1.3 * P.amp * Math.sin(2 * Math.PI * (frac(P.ph) - 0.2));
     ressortQueue(dt, P.amp * 0.09 * Math.sin(2 * Math.PI * P.ph - 1.3) + clamp(P.vy / V.VERT, -1.5, 1.8) * 0.1
       + (P.ruee >= 0 ? 0.14 : 0) - P.pitchV * 0.03);
-    if (P.y >= seuil) {
+    if (P.y >= GA) {
       if (P.vy > 15 && P.mal < 0 && P.pv > 0) atterrir();
-      else { P.y = seuil; P.vy = Math.min(P.vy, 0); }
+      else { P.y = GA; P.vy = Math.min(P.vy, 0); }
     }
     P.ombreT -= dt;
-    if (P.ruee >= 0 && P.ombreT <= 0) { P.ombreT = 0.028; ombres.push({ d: descRig(), vie: 0.2 }); }
+    if (P.ruee >= 0 && P.ombreT <= 0) { P.ombreT = 0.028; ombres.push({ d: posture(), vie: 0.2 }); }
   }
 
-  // ---------- ce qui est dessiné ----------
-  function descRig() {
-    return { type: 'rig', x: P.x, y: P.y, fs: P.fs, pitch: P.pitch, bob: P.bob, aile: poseAile(P), queue: P.queue,
-             tete: P.atk >= 0 ? Math.min(Math.floor(P.atk * FPS.attack), AN.attack.frames - 1) : -1, recul: P.recul };
-  }
-  function visuelDragon() {
-    const unique = (a, t, fps) => Math.min(Math.floor(t * fps), AN[a].frames - 1);
-    const planteGA = (an, i) => ({ type: 'planche', an, i, x: P.x, ay: GA, fs: P.fs });
-    if ((P.mode === 'air' || P.mode === 'fall') && planche) {
-      let an, i;
-      if (P.mode === 'fall') { an = 'hurt'; i = AN.hurt.frames - 1; }
-      else if (P.mal >= 0) { an = 'hurt'; i = unique('hurt', P.mal, FPS.hurt); }
-      else if (P.atk >= 0) { an = 'attack'; i = unique('attack', P.atk, FPS.attack); }
-      else { an = Math.abs(P.vx) > 40 ? 'flight' : 'idle'; i = Math.floor(temps * FPS[an]) % AN[an].frames; }
-      return { type: 'planche', an, i, x: P.x, ay: P.y, fs: P.fs };
+  // ---------- posture : ce qui décrit une image du dragon (aucune image figée : tout est calculé) ----------
+  function posture() {
+    const gueule = P.atk >= 0 ? Math.sin(Math.PI * clamp(P.atk / T_ATTAQUE, 0, 1)) : 0;   // la gueule s'ouvre puis se referme
+    const d = { x: P.x, y: P.y, fs: P.fs, pitch: 0, pose: 'vol', corps: { dx: 0, dy: 0, rot: 0 }, aile: { s: 1, sx: 1, rot: 0 },
+                queue: P.queue, tete: { dx: 2.2 * gueule, dy: -gueule, rot: -0.12 * gueule }, machoire: 0.55 * gueule,
+                cavalier: { dy: 0, rot: 0 }, jambePhase: P.pas, jambeAmp: 0, jambePli: 0 };
+    if (P.mode === 'air' || P.mode === 'fall') {
+      const ph = frac(P.ph);
+      d.pitch = P.pitch;
+      d.corps.dx = -P.recul * 3; d.corps.dy = P.bob;
+      d.aile = poseAile(P);
+      d.tete.dy += -0.6 * P.amp * Math.sin(2 * Math.PI * (ph - 0.35));
+      d.cavalier.dy = 0.7 * P.amp * Math.sin(2 * Math.PI * (ph - 0.05));
+      d.cavalier.rot = P.ruee >= 0 ? 0.3 : clamp(P.vy / V.PIQUE, 0, 1) * 0.2;       // il se couche dans la vitesse
+      if (P.mal >= 0 || P.mode === 'fall') d.machoire = Math.max(d.machoire, 0.35);
+      return d;
     }
-    switch (P.mode) {
-      case 'air': case 'fall': return descRig();
-      case 'jump': { const i = unique('jump', P.at, FPS.jump); return { type: 'planche', an: 'jump', i, x: P.x, ay: P.y - AN.jump.bodyY[i] * K, fs: P.fs }; }
-      case 'land': return planteGA('land', unique('land', P.at, FPS.land));
-      case 'dead': return planteGA('dead', unique('dead', P.at, FPS.dead));
-      default:
-        if (P.atk >= 0) return planteGA('attack', unique('attack', P.atk, FPS.attack));
-        if (P.accroupi > 0.05 && tenuBas) return planteGA('jump', 0);
-        if (Math.abs(P.vx) > 12) return planteGA('walk', Math.floor(P.pas) % AN.walk.frames);
-        return planteGA('land', AN.land.frames - 1);
+    if (P.mode === 'dead') { d.pose = 'gisant'; d.y = GA + P.rebond; return d; }
+    d.pose = 'sol'; d.y = GA;
+    const vit = Math.abs(P.vx) / V.MARCHE, marche = Math.min(1, vit), rebond = Math.abs(Math.sin(2 * Math.PI * P.pas));
+    d.jambeAmp = 0.5 * marche + 0.15 * clamp(vit - 1, 0, 1);
+    d.corps.dy = (0.6 - 1.4 * rebond) * marche;
+    d.tete.dy += 0.7 * rebond * marche;
+    d.cavalier.dy = 0.6 * rebond * marche;
+    d.aile = { s: 0.88 - 0.14 * marche + 0.03 * Math.sin(temps * 2), sx: 1 - 0.08 * marche, rot: 0.03 * Math.sin(2 * Math.PI * P.pas) };
+    if (marche < 0.1) {                                // à l'arrêt : il respire
+      const r = Math.sin(temps * 2.2);
+      d.corps.dy = -0.6 * r; d.tete.dy += -0.5 * Math.sin(temps * 2.2 - 0.6); d.cavalier.dy = -0.4 * r;
+    }
+    const pli = P.mode === 'jump' ? 1 : P.mode === 'land' ? Math.max(0, 1 - P.at / T_RECEPTION) * clamp(P.impact / 120, 0.5, 1)
+      : (P.accroupi > 0.05 && tenuBas ? 1 : 0);
+    d.corps.dy += 3 * pli; d.jambePli = 0.35 * pli; d.tete.dy += 2 * pli; d.cavalier.dy += pli; d.aile.s -= 0.2 * pli;
+    return d;
+  }
+  function autour(q, rot, dx = 0, dy = 0) { ctx.translate(q.p[0] + dx, q.p[1] + dy); ctx.rotate(rot); ctx.translate(-q.p[0], -q.p[1]); }
+  function transformer(q, d, loin) {
+    switch (q.role) {
+      case 'aile': {
+        const w = d.aile, [qx, qy] = q.a || [q.p[0] - 10, q.p[1]], b = Math.atan2(q.p[1] - qy, q.p[0] - qx);
+        ctx.translate(q.p[0], q.p[1]); ctx.rotate(b + w.rot);
+        ctx.scale(w.sx * (loin ? LOIN.sx : 1), w.s * (loin ? LOIN.s : 1));
+        ctx.rotate(-b); ctx.translate(-q.p[0], -q.p[1]);
+        break;
+      }
+      case 'tete': autour(q, d.tete.rot, Math.round(d.tete.dx), Math.round(d.tete.dy)); break;
+      case 'machoire': autour(q, d.machoire); break;
+      case 'queue': autour(q, d.queue); break;
+      case 'cavalier': autour(q, d.cavalier.rot, 0, Math.round(d.cavalier.dy)); break;
+      case 'jambe': autour(q, d.jambeAmp * Math.sin(2 * Math.PI * (d.jambePhase + (q.phase || 0))) + d.jambePli * (q.avant ? 1 : -1)); break;
     }
   }
-  function dessinerPlanche(d, jeuDeTeintes) {
-    ctx.save();
-    ctx.translate(Math.round(d.x - cam), Math.round(d.ay));
-    ctx.scale(d.fs, 1);
-    ctx.drawImage(PL[jeuDeTeintes], d.i * FW, AN[d.an].row * FH, FW, FH, -AX, -AY, FW, FH);
-    ctx.restore();
-  }
-  function aile(img, w, loin) {
-    ctx.save();
-    if (loin) ctx.translate(LOIN.dx * K, LOIN.dy * K);
-    ctx.translate(EPAULE[0], EPAULE[1]);
-    ctx.rotate(BETA + w.rot);
-    ctx.scale(w.sx * (loin ? LOIN.sx : 1), w.s * (loin ? LOIN.scale : 1));
-    ctx.rotate(-BETA);
-    ctx.translate(-EPAULE[0], -EPAULE[1]);
-    ctx.drawImage(img, -AX, -AY);
-    ctx.restore();
-  }
-  function dessinerRig(d, jeuDeTeintes) {
-    const L = RG[jeuDeTeintes];
+  function dessinerPosture(d, jeu) {
+    const L = PIECES[jeu][d.pose], tete = L.find((q) => q.role === 'tete');
     ctx.save();
     ctx.translate(Math.round(d.x - cam), Math.round(d.y));
-    ctx.scale(d.fs, 1);
-    ctx.rotate(d.pitch);
-    ctx.translate(-Math.round(d.recul * 3), Math.round(d.bob));
-    aile(L.loin, d.aile, true);
-    ctx.save();
-    ctx.translate(PIVOT_QUEUE[0], PIVOT_QUEUE[1]); ctx.rotate(d.queue); ctx.translate(-PIVOT_QUEUE[0], -PIVOT_QUEUE[1]);
-    ctx.drawImage(L.queue, -AX, -AY);
-    ctx.restore();
-    if (d.tete >= 0) {
-      ctx.drawImage(L.corpsSansTete, -AX, -AY);
-      const [dx, dy] = DECALAGE_TETE[d.tete];
-      ctx.drawImage(L.tetes[d.tete], Math.round(-AX + dx), Math.round(-AY + dy));
-    } else ctx.drawImage(L.corps, -AX, -AY);
-    aile(d.aile.s < 0 ? L.dessous : L.aile, d.aile, false);
+    ctx.scale(largeurDemiTour(d.fs), 1);
+    if (d.pitch) ctx.rotate(d.pitch);
+    ctx.translate(Math.round(d.corps.dx), Math.round(d.corps.dy));
+    for (const q of L) if (q.double) {                  // l'aile opposée, plus sombre, derrière tout
+      ctx.save(); ctx.translate(LOIN.dx, LOIN.dy); transformer(q, d, true); ctx.drawImage(q.loin, q.o[0], q.o[1]); ctx.restore();
+    }
+    for (const q of L) {
+      ctx.save();
+      if (q.parent === 'tete' && tete) transformer(tete, d, false);
+      transformer(q, d, false);
+      ctx.drawImage(q.role === 'aile' && d.aile.s < 0 ? q.dessous : q.img, q.o[0], q.o[1]);
+      ctx.restore();
+    }
     ctx.restore();
   }
   const largeurDemiTour = (fs) => (fs < 0 ? -1 : 1) * (0.3 + 0.7 * Math.abs(fs));
-  function dessiner(d, jeuDeTeintes) {
-    (d.type === 'rig' ? dessinerRig : dessinerPlanche)(Object.assign({}, d, { fs: largeurDemiTour(d.fs) }), jeuDeTeintes);
-  }
   function dessinerDragon() {
-    const d = visuelDragon();
+    const d = posture();
     const haut = clamp((SOL - P.y) / (SOL - PLAFOND), 0, 1);
     const lo = Math.round(46 * (1 - haut * 0.6));
     ctx.fillStyle = '#050407';
@@ -1167,20 +1137,21 @@
       const w = Math.round(lo * Math.sqrt(Math.max(0, 1 - ((y - 1) / 1.6) ** 2)));
       ctx.fillRect(Math.round(P.x - cam + P.fs * 6) - w, SOL + 1 + y, w * 2, 1);
     }
-    for (const o of ombres) { ctx.globalAlpha = 0.5 * o.vie / 0.2; dessiner(o.d, 'fantome'); }
+    for (const o of ombres) { ctx.globalAlpha = 0.5 * o.vie / 0.2; dessinerPosture(o.d, 'fantome'); }
     ctx.globalAlpha = 1;
     const clignote = P.inv > 0 && P.pv > 0 && P.ruee < 0 && P.mal < 0 && Math.floor(temps * 30) % 2;
     if (clignote) return;
-    if (P.flash > 0) { dessiner(d, 'blanc'); return; }
+    if (P.flash > 0) { dessinerPosture(d, 'blanc'); return; }
     // liseré clair : le dragon noir reste lisible sur la nuit
-    for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) { ctx.save(); ctx.translate(dx, dy); dessiner(d, 'contour'); ctx.restore(); }
-    dessiner(d, 'normal');
+    for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) { ctx.save(); ctx.translate(dx, dy); dessinerPosture(d, 'contour'); ctx.restore(); }
+    dessinerPosture(d, 'normal');
     if (reperes) {
       ctx.fillStyle = '#ff3b3b';
       ctx.fillRect(Math.round(P.x - cam) - 4, Math.round(P.y), 9, 1); ctx.fillRect(Math.round(P.x - cam), Math.round(P.y) - 4, 1, 9);
       ctx.fillStyle = '#3bffb0';
       for (let a = 0; a < 6.28; a += 0.12) ctx.fillRect(Math.round(P.x - cam + P.face * 6 + Math.cos(a) * 34), Math.round(P.y + 4 + Math.sin(a) * 12), 1, 1);
-      texte(`${P.mode} · ${d.type === 'rig' ? 'marionnette' : d.an + ' ' + (d.i + 1)}`.toUpperCase(), 6, H - 12, '#9fb4c8');
+      const [bx, by] = boucheMonde(); ctx.fillStyle = '#ffd9a0'; ctx.fillRect(Math.round(bx - cam) - 1, Math.round(by) - 1, 3, 3);
+      texte(`${P.mode} · pose ${d.pose}`.toUpperCase(), 6, H - 12, '#9fb4c8');
     }
   }
 
@@ -1436,6 +1407,7 @@
       } else if (p.genre === 'ecto') { ctx.fillStyle = k > 0.5 ? BRUME : '#3e3549'; ctx.fillRect(x, y, 1, 1); }
       else if (p.genre === 'poussiere') disque(x, y, Math.round(p.t + (1 - k) * 3), k > 0.5 ? '#5a4f5f' : '#3a3044');
       else if (p.genre === 'eclair') disque(x, y, 9, '#ffffff');
+      else if (p.genre === 'bouche') { disque(x, y, 5, FEU[3]); disque(x, y, 3, FEU[1]); disque(x, y, 1, FEU[0]); }
       else if (p.genre === 'onde') {
         const r = Math.round(4 + (1 - k) * 16);
         ctx.fillStyle = k > 0.5 ? FEU[0] : FEU[2];
@@ -1470,7 +1442,6 @@
       texte('LE VEILLEUR', W / 2, 6, OS, 1, 'ombre', 'centre');
       barre(Math.round(W / 2) - 60, 16, 120, veilleur.pv / veilleur.pvMax, SANG_VIF);
     }
-    if (planche) texte('ANIM : PLANCHE (P)', 6, 38, '#9fb4c8');
   }
   function dessinerCarte() {
     if (!carte) return;
@@ -1587,18 +1558,15 @@
 
   // lecture seule, pour les tests automatisés (outils de vérification)
   window.__dragonRider = () => {
-    const v = visuelDragon();
     return { etat, acte: acte + 1, decor: acteVisuel + 1, arene, veilleur: veilleur ? veilleur.pv : null, veilleurY: veilleur ? Math.round(veilleur.y) : null, mode: P.mode,
              pv: P.pv, score, ennemis: ennemis.length, x: Math.round(P.x), sx: Math.round(P.x - cam), sy: Math.round(P.y),
-             visuel: v.type === 'rig' ? 'marionnette' : v.an + ' ' + (v.i + 1) };
+             visuel: posture().pose };
   };
 
   const img = new Image();
   img.onload = () => {
     disposer();
-    PL = construirePlanches(img);
-    RG = { normal: construireRig(PL.normal, true), blanc: construireRig(PL.blanc, false),
-           fantome: construireRig(PL.fantome, false), contour: construireRig(PL.contour, false) };
+    PIECES = construirePieces(img);
     DECORS = [decorTerres(), decorCimetiere(), decorCryptes()];
     LUNE = construireLune(); BRUME_T = tuileBrume(); HALOS = [construireHalo(14, 1), construireHalo(16, 2)];
     construireEnnemis();
@@ -1611,6 +1579,6 @@
     texte('PLANCHE DU DRAGON INTROUVABLE', W / 2, H / 2 - 6, SANG_VIF, 1, 'ombre', 'centre');
     texte('RECONSTRUIRE : OUTILS/CONSTRUIRE_JEU.PY', W / 2, H / 2 + 8, OS, 1, 'ombre', 'centre');
   };
-  img.src = SHEET;
+  img.src = ATLAS;
 })();
 </script>
