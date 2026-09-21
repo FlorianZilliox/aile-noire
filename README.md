@@ -36,15 +36,17 @@ Raccourcis d'entraînement, à ajouter à la fin de l'adresse : `#calme` (sans e
 
 ## Pixel Artist
 
-`pixel_artist/` est le pipeline qui redessine le dragon en pixel art propre et le découpe en pièces articulées. Le jeu n'utilise plus aucune image de la planche IA : il anime lui-même les pièces (ailes, aile opposée, queue, tête, mâchoire, cavalier, quatre pattes).
+`pixel_artist/` est le pipeline qui redessine le dragon en pixel art et le prépare pour le jeu. Le jeu n'embarque plus la planche IA d'origine.
 
-- **Recette** (`pixel_artist/dragon.json`) : les poses de base (en vol, au sol, à terre), les pièces de chaque pose (polygone + pivot), la palette et les réglages.
-- **Pixel art** : réduction, lissage sélectif (les détails contrastés comme l'œil ou le visage du cavalier sont protégés), palette commune de 9 teintes, nettoyage des pixels isolés, contour net.
-- **Sorties** (`assets/pixel-artist/`) : l'atlas des pièces (`dragon.png`, 7 Ko) et sa description (`dragon.json`), une planche propre de toutes les images du modèle (`dragon_propre.png`, pour un autre moteur), et `apercu.png` où chaque pièce est mise en mouvement.
+- **Recette** (`pixel_artist/dragon.json`) : la pose de base en vol et ses pièces (polygone + pivot), la palette de 15 teintes, les zones protégées et les variantes.
+- **Pixel art** : réduction de moitié, palette en rampe du noir bleuté au blanc chaud (le détail des ailes et du corps est conservé), puis nettoyage des éclats clairs parasites (griffes, poussière) hors des zones protégées (yeux, dents, visage du cavalier, souffle).
+- **En vol** : le dragon est une marionnette (ailes, aile opposée, queue, tête, cavalier) animée en continu ; au tir, la vraie tête gueule ouverte du modèle est greffée (6 variantes recalées automatiquement).
+- **Au sol** : course, décollage, atterrissage et chute utilisent les images du modèle, redessinées avec la même palette (`dragon_propre.png`).
+- **Sorties** (`assets/pixel-artist/`) : `dragon.png` + `dragon.json` (pièces et variantes), `dragon_propre.png` + `.json` (toutes les images, utilisables dans un autre moteur), `apercu.png`.
 
 ```sh
-python3 pixel_artist/pixel_artist.py      # régénère l'atlas, la planche propre et l'aperçu
-python3 outils/construire_jeu.py          # intègre l'atlas dans Dragon-Rider.html
+python3 pixel_artist/pixel_artist.py      # régénère pièces, planche propre et aperçu
+python3 outils/construire_jeu.py          # intègre le tout dans Dragon-Rider.html
 ```
 
 ## Comment c'est fait
@@ -54,7 +56,7 @@ La planche d'origine (`ChatGPT Image 21 sept. 2026, 11_55_30.png`) n'est pas uti
 1. `outils/extraire_sprites.py` : découpe les 49 images, retire le fond (transparence recalculée sur les bords), les recale sur une ancre commune et cale les animations au sol sur la ligne de sol. Produit `assets/dragon_sheet.png` (grille régulière, utilisable dans Godot, Unity ou Phaser) et `assets/dragon_sheet.json`.
 2. `outils/animer_ailes.py` : découpe l'aile, la queue et la tête pour animer le dragon en marionnette (battement d'ailes continu, tête d'attaque greffée). Ajoute une animation `flap` pré-calculée et la description de la marionnette dans le JSON.
 3. `pixel_artist/pixel_artist.py` : redessine le dragon en pixel art et le découpe en pièces (voir plus haut).
-4. `outils/construire_jeu.py` : assemble `outils/jeu.src.html` et l'atlas Pixel Artist en un seul fichier, `Dragon-Rider.html` (≈ 100 Ko).
+4. `outils/construire_jeu.py` : assemble `outils/jeu.src.html` et les sorties Pixel Artist en un seul fichier, `Dragon-Rider.html` (≈ 260 Ko).
 
 Pour tout reconstruire (Python 3 avec Pillow, numpy et scipy) :
 
@@ -67,5 +69,5 @@ python3 outils/construire_jeu.py
 
 ## Limites connues
 
-- Les pattes, découpées dans une pose de la planche IA où elles se chevauchent, bougent de façon discrète : une marche plus ample demandera de redessiner les pattes à part.
-- Les poses de base viennent encore de la planche IA (redessinées par Pixel Artist) : de nouvelles poses demandent une nouvelle source.
+- Les images au sol viennent de la planche IA (redessinées) : elles gardent ses petites incohérences d'une image à l'autre.
+- De nouvelles poses ou animations demandent une nouvelle source (dessin ou planche générée).

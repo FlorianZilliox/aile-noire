@@ -3,61 +3,137 @@
  "frameWidth": 184,
  "frameHeight": 88,
  "anchor": {
-  "x": 78,
-  "y": 50
+  "x": 77.5,
+  "y": 50.0
  },
  "groundOffset": 24.5,
  "palette": [
-  "#07060b",
-  "#141018",
-  "#1e1824",
-  "#2a2231",
-  "#3a3043",
-  "#524659",
-  "#766a7d",
-  "#a79daf",
+  "#050407",
+  "#0b0910",
+  "#110e17",
+  "#18141f",
+  "#201a28",
+  "#292232",
+  "#332b3d",
+  "#3e3549",
+  "#4b4156",
+  "#5a5065",
+  "#6c6276",
+  "#827889",
+  "#9c93a1",
+  "#bdb6bf",
   "#e6e0dc"
  ],
+ "mouth": {
+  "x": 54.0,
+  "y": 5.5
+ },
  "animations": {
   "idle": {
    "row": 0,
    "frames": 6,
-   "grounded": false
+   "grounded": false,
+   "bodyY": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ]
   },
   "attack": {
    "row": 1,
    "frames": 6,
-   "grounded": false
+   "grounded": false,
+   "bodyY": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   "fireFrame": 2
   },
   "hurt": {
    "row": 2,
    "frames": 4,
-   "grounded": false
+   "grounded": false,
+   "bodyY": [
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ]
   },
   "dead": {
    "row": 3,
    "frames": 4,
-   "grounded": true
+   "grounded": true,
+   "bodyY": [
+    9.0,
+    8.0,
+    10.0,
+    12.5
+   ]
   },
   "flight": {
    "row": 4,
    "frames": 7,
-   "grounded": false
+   "grounded": false,
+   "bodyY": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ]
   },
   "jump": {
    "row": 5,
    "frames": 7,
-   "grounded": true
+   "grounded": true,
+   "bodyY": [
+    1.0,
+    -9.0,
+    -24.5,
+    -22.0,
+    -12.0,
+    -12.0,
+    -1.5
+   ]
   },
   "walk": {
    "row": 6,
    "frames": 7,
-   "grounded": true
+   "grounded": true,
+   "bodyY": [
+    1.0,
+    -1.0,
+    -0.5,
+    0.0,
+    -3.0,
+    1.5,
+    2.5
+   ]
   },
   "land": {
    "row": 7,
    "frames": 8,
-   "grounded": true
+   "grounded": true,
+   "bodyY": [
+    -9.0,
+    -5.0,
+    -3.5,
+    0.5,
+    4.0,
+    8.5,
+    11.0,
+    11.0
+   ]
   }
  }
 }

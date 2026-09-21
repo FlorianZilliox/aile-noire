@@ -101,18 +101,54 @@ def nettoyer(idx, passes):
     return idx
 
 
-def pixeliser(cellule, rec, centres):
-    """→ tableau d'indices de palette (−1 : transparent), avec un pixel de marge et le contour (indice 0)."""
+def eclats(idx, protege, n):
+    """Pixel clair isolé (griffe, poussière, reflet parasite) : il rejoint ses voisins, sauf en zone protégée
+    (yeux, dents, visage du cavalier, étincelles du souffle)."""
+    h, w = idx.shape
+    pad = np.pad(idx, 1, constant_values=-1)
+    v8 = np.stack([pad[1 + dy:1 + dy + h, 1 + dx:1 + dx + w] for dy in (-1, 0, 1) for dx in (-1, 0, 1) if dy or dx], -1)
+    voisins_clairs = ((v8 >= idx[..., None] - 2) & (v8 >= 0)).sum(-1)
+    isole = (idx >= round(n * 0.6)) & (voisins_clairs == 0) & ~protege
+    opaques = (v8 >= 0).sum(-1)
+    med = np.sort(np.where(v8 >= 0, v8, 99), -1)
+    mediane = np.take_along_axis(med, np.maximum(opaques // 2, 0)[..., None], -1)[..., 0]
+    out = np.where(isole, np.where(opaques >= 3, mediane, -1), idx)
+    # petits groupes clairs (1 ou 2 pixels) hors zone protégée : même traitement
+    clair = (out >= round(n * 0.6)) & ~protege
+    lab, nb = ndi.label(clair, np.ones((3, 3), bool))
+    if nb:
+        tailles = ndi.sum(np.ones_like(lab), lab, range(1, nb + 1))
+        petits = np.isin(lab, [k + 1 for k in range(nb) if tailles[k] <= 2])
+        pad = np.pad(np.where(clair, -1, out), 1, constant_values=-1)
+        v8 = np.stack([pad[1 + dy:1 + dy + h, 1 + dx:1 + dx + w] for dy in (-1, 0, 1) for dx in (-1, 0, 1) if dy or dx], -1)
+        sombres = (v8 >= 0).sum(-1)
+        tri = np.sort(np.where(v8 >= 0, v8, 99), -1)
+        med2 = np.take_along_axis(tri, np.maximum(sombres // 2, 0)[..., None], -1)[..., 0]
+        out = np.where(petits, np.where(sombres >= 2, med2, -1), out)
+    return out
+
+
+def pixeliser(cellule, rec, centres, protege=None):
+    """→ tableau d'indices de palette (−1 : transparent), avec un pixel de marge (et le contour si demandé)."""
     L, m = reduire(cellule, rec['echelle'])
-    Ls = lisser(L, m, rec['detail'])
-    idx = np.full(L.shape, -1)
-    idx[m] = np.argmin(np.abs(Ls[m][:, None] - centres[None, :]), 1)
-    idx = nettoyer(idx, rec['passes'])
-    rangs = np.array(rec['rangs'])
+    n = len(rec['palette'])
+    if rec.get('mode') == 'rampe':               # luminance → teinte d'une palette ordonnée du sombre au clair
+        idx = np.full(L.shape, -1)
+        idx[m] = np.minimum(n - 1, np.round(np.power(np.clip(L[m] / 255, 0, 1), rec.get('gamma', 1)) * (n - 1))).astype(int)
+    else:                                        # k-moyennes sur la luminance lissée, puis rangs de palette
+        Ls = lisser(L, m, rec['detail'])
+        idx = np.full(L.shape, -1)
+        idx[m] = np.argmin(np.abs(Ls[m][:, None] - centres[None, :]), 1)
+        idx = nettoyer(idx, rec['passes'])
+        rangs = np.array(rec['rangs'])
+        idx = np.where(idx >= 0, rangs[np.maximum(idx, 0)], -1)
     out = np.full((L.shape[0] + 2, L.shape[1] + 2), -1)
-    out[1:-1, 1:-1] = np.where(idx >= 0, rangs[np.maximum(idx, 0)], -1)
-    plein = out >= 0
-    out[ndi.binary_dilation(plein, CROIX) & ~plein] = 0
+    out[1:-1, 1:-1] = idx
+    if rec.get('eclats'):
+        out = eclats(out, protege if protege is not None else np.zeros(out.shape, bool), n)
+    if rec.get('contour', True):
+        plein = out >= 0
+        out[ndi.binary_dilation(plein, CROIX) & ~plein] = 0
     return out
 
 
@@ -162,7 +198,8 @@ def decouper(idx, pose, rec, planche):
     ys, xs = np.mgrid[0:H, 0:W] + 0.5
     for zone in pose.get('effacer', []):               # poussière, ombre dessinée… : hors du personnage
         idx = np.where(dans_polygone(xs, ys, [vers(p) for p in zone]), -1, idx)
-    idx = retracer_contour(idx)
+    if pose.get('effacer') and rec.get('contour', True):
+        idx = retracer_contour(idx)
     appart = np.full(idx.shape, -1)
     for k, piece in enumerate(pose['pieces']):
         appart[dans_polygone(xs, ys, [vers(p) for p in piece['poly']]) & (idx >= 0) & (appart < 0)] = k
@@ -185,6 +222,32 @@ def decouper(idx, pose, rec, planche):
     calques.insert(0, dict(nom='corps', role='corps', z=0, parent=None, double=False, phase=None,
                            pivot=None, axe=None, pixels=corps))
     return calques, appart, idx
+
+
+def recaler(ref, img):
+    """Décalage entier (dy, dx) qui superpose au mieux la silhouette sombre de img sur ref."""
+    h, w = ref.shape[0] * 2, ref.shape[1] * 2
+    cc = np.fft.irfft2(np.fft.rfft2(ref, (h, w)) * np.conj(np.fft.rfft2(img, (h, w))), (h, w))
+    dy, dx = np.unravel_index(np.argmax(cc), cc.shape)
+    return (dy - h if dy > h // 2 else dy), (dx - w if dx > w // 2 else dx)
+
+
+def variantes(piece, calque, pose, rec, planche, centres, protege):
+    """Même pièce prise dans d'autres images du modèle (ex. têtes d'attaque gueule ouverte)."""
+    v = piece['variantes']
+    f = rec['echelle']
+    vers = lambda p: ((planche.ax + p[0]) * f + 1, (planche.ay + p[1]) * f + 1)
+    sombre = lambda px: ((px >= 0) & (px <= len(rec['palette']) * 0.4)).astype(float)
+    base = sombre(calque['pixels'])
+    sortie = []
+    for i in range(planche.desc['animations'][v['anim']]['frames']):
+        idx = pixeliser(planche.cellule(v['anim'], i), rec, centres, protege)
+        H, W = idx.shape
+        ys, xs = np.mgrid[0:H, 0:W] + 0.5
+        pix = np.where(dans_polygone(xs, ys, [vers(p) for p in v['poly']]), idx, -1)
+        dy, dx = recaler(base, sombre(np.where(dans_polygone(xs, ys, [vers(p) for p in piece['poly']]), pix, -1)))
+        sortie.append({'pixels': pix, 'decalage': (int(dx), int(dy))})
+    return sortie
 
 
 # ---------------------------------------------------------------- 5. atlas
@@ -250,6 +313,16 @@ def composer(calques, taille, palette, params, marge=20):
 
 
 # ---------------------------------------------------------------- principal
+def masque_protege(rec, planche, forme):
+    f = rec['echelle']
+    H, W = forme
+    ys, xs = np.mgrid[0:H, 0:W] + 0.5
+    m = np.zeros(forme, bool)
+    for zone in rec.get('proteger', []):
+        m |= dans_polygone(xs, ys, [((planche.ax + p[0]) * f + 1, (planche.ay + p[1]) * f + 1) for p in zone])
+    return m
+
+
 def main():
     chemin = Path(sys.argv[1]) if len(sys.argv) > 1 else ICI / 'dragon.json'
     rec = json.loads(chemin.read_text())
@@ -257,45 +330,59 @@ def main():
     palette = [hex_rgb(h) for h in rec['palette']]
     f = rec['echelle']
 
-    # palette commune : teintes calculées sur toutes les poses à la fois
     sources = {nom: planche.cellule(*pose['source']) for nom, pose in rec['poses'].items()}
-    valeurs = []
-    for cell in sources.values():
-        L, m = reduire(cell, f)
-        valeurs.append(lisser(L, m, rec['detail'])[m])
-    centres = centres_communs(valeurs, rec['teintes'])
+    centres = None
+    if rec.get('mode') != 'rampe':               # palette commune : teintes calculées sur toutes les poses
+        valeurs = []
+        for cell in sources.values():
+            L, m = reduire(cell, f)
+            valeurs.append(lisser(L, m, rec['detail'])[m])
+        centres = centres_communs(valeurs, rec['teintes'])
+    forme = (round(planche.ch * f) + 2, round(planche.cw * f) + 2)
+    protege = masque_protege(rec, planche, forme)
 
     SORTIE.mkdir(parents=True, exist_ok=True)
     description = {'nom': rec['nom'], 'echelle': f, 'palette': rec['palette'], 'poses': {}}
     morceaux, refs, apercus = [], [], []
+
+    def ranger(pixels, entree, decalage=(0, 0)):
+        b = boite(pixels)
+        if b is None:
+            return False
+        x0, y0, x1, y1 = b
+        morceaux.append(pixels[y0:y1, x0:x1])
+        entree['origine'] = [int(x0 + decalage[0]), int(y0 + decalage[1])]
+        refs.append(entree)
+        return True
+
     for nom, pose in rec['poses'].items():
-        idx = pixeliser(sources[nom], rec, centres)
+        idx = pixeliser(sources[nom], rec, centres, protege)
         calques, appart, idx = decouper(idx, pose, rec, planche)
         anim = planche.desc['animations'][pose['source'][0]]
         ancre = [planche.ax * f + 1, planche.ay * f + 1]
         info = {'taille': [idx.shape[1], idx.shape[0]], 'ancre': ancre,
                 'sol': ancre[1] + planche.desc['groundOffset'] * f if anim.get('grounded') else None, 'calques': []}
-        machoire = next((p for p in pose['pieces'] if p['role'] == 'machoire'), None)
-        if machoire:
-            xs = [p[0] for p in machoire['poly']]
-            ys = [p[1] for p in machoire['poly']]
-            info['bouche'] = [(planche.ax + max(xs) - 4) * f + 1, (planche.ay + min(ys) + 1) * f + 1]
+        pieces = {p['nom']: p for p in pose['pieces']}
+        vars_apercu = []
         for c in calques:
-            b = boite(c['pixels'])
-            if b is None:
-                continue
-            x0, y0, x1, y1 = b
-            morceaux.append(c['pixels'][y0:y1, x0:x1])
             entree = {k: c[k] for k in ('nom', 'role', 'z', 'parent', 'double', 'phase') if c[k] not in (None, False)}
-            entree.update(origine=[int(x0), int(y0)])
             if c['pivot'] is not None:
                 entree['pivot'] = [round(c['pivot'][0], 2), round(c['pivot'][1], 2)]
             if c['axe'] is not None:
                 entree['axe'] = [round(c['axe'][0], 2), round(c['axe'][1], 2)]
+            if not ranger(c['pixels'], entree):
+                continue
+            piece = pieces.get(c['nom'])
+            if piece and 'variantes' in piece:
+                entree['variantes'] = []
+                for v in variantes(piece, c, pose, rec, planche, centres, protege):
+                    ev = {}
+                    if ranger(v['pixels'], ev, v['decalage']):
+                        entree['variantes'].append(ev)
+                        vars_apercu.append((c, v))
             info['calques'].append(entree)
-            refs.append(entree)
         description['poses'][nom] = info
-        apercus.append((nom, idx, calques, appart, info))
+        apercus.append((nom, idx, calques, appart, info, vars_apercu))
 
     places, (aw, ah) = emballer(morceaux)
     atlas = Image.new('RGBA', (aw, ah))
@@ -305,39 +392,46 @@ def main():
     atlas.save(SORTIE / f"{rec['nom']}.png", optimize=True)
     (SORTIE / f"{rec['nom']}.json").write_text(json.dumps(description, indent=1, ensure_ascii=False))
 
-    # planche propre : toutes les images du modèle, redessinées avec la même palette
-    cw, ch = round(planche.cw * f) + 2, round(planche.ch * f) + 2
+    # planche propre : toutes les images du modèle, redessinées avec la même palette et les mêmes réglages
+    cw, ch = forme[1], forme[0]
     anims = {k: v for k, v in planche.desc['animations'].items() if k != 'flap'}
     colonnes = max(a['frames'] for a in anims.values())
     propre = Image.new('RGBA', (colonnes * cw, len(anims) * ch))
     for r, (nom, a) in enumerate(anims.items()):
         for i in range(a['frames']):
-            propre.paste(en_image(pixeliser(planche.cellule(nom, i), rec, centres), palette), (i * cw, r * ch))
+            propre.paste(en_image(pixeliser(planche.cellule(nom, i), rec, centres, protege), palette), (i * cw, r * ch))
     propre.save(SORTIE / f"{rec['nom']}_propre.png", optimize=True)
+    bouche = planche.desc.get('mouth')
     (SORTIE / f"{rec['nom']}_propre.json").write_text(json.dumps({
         'image': f"{rec['nom']}_propre.png", 'frameWidth': cw, 'frameHeight': ch,
-        'anchor': {'x': round(planche.ax * f + 1), 'y': round(planche.ay * f + 1)},
-        'groundOffset': round(planche.desc['groundOffset'] * f, 1), 'palette': rec['palette'],
-        'animations': {k: {'row': r, 'frames': a['frames'], 'grounded': a.get('grounded', False)} for r, (k, a) in enumerate(anims.items())},
+        'anchor': {'x': planche.ax * f + 1, 'y': planche.ay * f + 1},
+        'groundOffset': planche.desc['groundOffset'] * f, 'palette': rec['palette'],
+        'mouth': {'x': bouche['x'] * f, 'y': bouche['y'] * f} if bouche else None,
+        'animations': {k: {'row': r, 'frames': a['frames'], 'grounded': a.get('grounded', False),
+                           'bodyY': [round(b * f, 2) for b in a.get('bodyY', [0] * a['frames'])],
+                           **({'fireFrame': a['fireFrame']} if 'fireFrame' in a else {})}
+                       for r, (k, a) in enumerate(anims.items())},
     }, indent=1, ensure_ascii=False))
 
-    # aperçu : pièces colorées, puis chaque pièce mise en mouvement
-    TEINTES = [(224, 112, 46), (111, 179, 210), (181, 138, 214), (127, 181, 138), (214, 193, 90), (214, 115, 138), (160, 200, 120), (230, 150, 80), (120, 150, 230)]
+    # aperçu : pièces colorées, pièces en mouvement, têtes d'attaque greffées, puis la course
+    TEINTES = [(224, 112, 46), (111, 179, 210), (181, 138, 214), (127, 181, 138), (214, 193, 90), (214, 115, 138)]
     lignes = []
-    for nom, idx, calques, appart, info in apercus:
-        img = en_image(idx, palette)
-        arr = np.array(img).astype(float)
+    for nom, idx, calques, appart, info, vars_apercu in apercus:
+        arr = np.array(en_image(idx, palette)).astype(float)
         for k in range(appart.max() + 1):
             sel = appart == k
             arr[sel, :3] = arr[sel, :3] * 0.5 + np.array(TEINTES[k % len(TEINTES)]) * 0.5
-        vues = [Image.fromarray(arr.astype(np.uint8))]
-        essais = {'vol': [{'aile': {'s': -0.8}, 'machoire': 0.5, 'queue': 0.3, 'cavalier': -0.15}, {'aile': {'s': 0.2, 'sx': 0.6, 'rot': 0.25}, 'tete': {'rot': -0.2}, 'queue': -0.2}],
-                  'sol': [{'jambes': {'patte avant': 0.5, 'patte arriere': -0.5, 'patte avant loin': -0.5, 'patte arriere loin': 0.5}, 'machoire': 0.5, 'aile': {'s': 0.6}},
-                          {'jambes': {'patte avant': -0.45, 'patte arriere': 0.45, 'patte avant loin': 0.45, 'patte arriere loin': -0.45}, 'tete': {'dy': 1, 'rot': 0.15}, 'queue': 0.25}],
-                  }.get(nom, [])
-        for params in essais:
-            vues.append(composer(calques, info['taille'], palette, params))
+        vues = [Image.fromarray(arr.astype(np.uint8)),
+                composer(calques, info['taille'], palette, {'aile': {'s': -0.8}, 'queue': 0.3, 'cavalier': -0.15})]
+        for c, v in vars_apercu[2:5]:           # la tête d'attaque remplace la tête au repos
+            greffe = [x for x in calques if x is not c] + [dict(c, pixels=np.roll(np.roll(v['pixels'], v['decalage'][1], 0), v['decalage'][0], 1))]
+            vues.append(composer(greffe, info['taille'], palette, {}))
         lignes.append((nom, vues))
+    course = []
+    r = list(anims).index('walk')
+    for i in range(anims['walk']['frames']):
+        course.append(propre.crop((i * cw, r * ch, (i + 1) * cw, (r + 1) * ch)))
+    lignes.append(('course (planche propre)', course))
     z = 3
     largeur = max(sum(v.width * z + 12 for v in vues) for _, vues in lignes)
     hauteur = sum(max(v.height for v in vues) * z + 22 for _, vues in lignes)
@@ -356,7 +450,7 @@ def main():
     apercu.save(SORTIE / 'apercu.png')
 
     nb = sum(len(p['calques']) for p in description['poses'].values())
-    print(f"{rec['nom']} : {len(description['poses'])} poses, {nb} calques -> {SORTIE.name}/{rec['nom']}.png ({aw}x{ah}), "
+    print(f"{rec['nom']} : {len(description['poses'])} pose(s), {nb} calques -> {SORTIE.name}/{rec['nom']}.png ({aw}x{ah}), "
           f"planche propre {propre.width}x{propre.height}, aperçu")
 
 
