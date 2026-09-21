@@ -6,7 +6,9 @@ Le but est de tester si une planche « IA » peut devenir un vrai jeu.
 
 ## Jouer
 
-Ouvrir `Aile-Noire.html` dans un navigateur (double-clic). Le fichier est autonome : il fonctionne hors ligne et n'a rien à installer.
+En ligne : https://florianzilliox.github.io/aile-noire/
+
+Ou ouvrir `Aile-Noire.html` dans un navigateur (double-clic). Le fichier est autonome : il fonctionne hors ligne et n'a rien à installer.
 
 | Action | Clavier | Manette à l'écran |
 |---|---|---|
