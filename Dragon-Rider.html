@@ -140,27 +140,24 @@
 
   // l'histoire : trois actes vers la droite, puis le Veilleur au fond des cryptes
   const ACTES = [
-    { num: 'I', nom: 'LES TERRES DÉCHARNÉES', sous: "RIEN NE POUSSE PLUS. RIEN N'ATTEND.",
-      debut: 0, fin: 3400, types: ['charognard', 'ame', 'charognard'], intervalle: 2.6, max: 4, interieur: false },
-    { num: 'II', nom: 'LE CIMETIÈRE DES ROIS', sous: 'ILS ONT RÉGNÉ. IL RESTE LEURS NOMS.',
-      debut: 3400, fin: 6800, types: ['chauve', 'spectre', 'charognard'], intervalle: 2.3, max: 5, interieur: false },
-    { num: 'III', nom: 'LES CRYPTES', sous: 'EN BAS, QUELQUE CHOSE VEILLE ENCORE.',
-      debut: 6800, fin: 10200, types: ['chauve', 'crane', 'spectre'], intervalle: 2.0, max: 5, interieur: true },
+    { num: 'I', nom: 'LES TERRES DÉCHARNÉES', sous: "RIEN NE POUSSE PLUS. RIEN N'ATTEND." },
+    { num: 'II', nom: 'LE CIMETIÈRE DES ROIS', sous: 'ILS ONT RÉGNÉ. IL RESTE LEURS NOMS.' },
+    { num: 'III', nom: 'LES CRYPTES', sous: 'EN BAS, QUELQUE CHOSE VEILLE ENCORE.' },
   ];
-  const ARENE = ACTES[2].fin;
+  // le souffle du dragon (1 = plein) : ce que coûte une seconde de vol, ce que rendent le sol et les courants
+  const SOUFFLE = { montee: 1 / 3.5, palier: 1 / 7, courant: 1.4, sol: 1.2, epuise: 42 };
   const EPILOGUE = ["LE VEILLEUR S'EST TU.", "AU FOND DE LA CRYPTE, IL N'Y AVAIT RIEN.",
                     'NI TRÉSOR, NI RÉPONSE. SEULEMENT LA NUIT.', 'LE DRAGONNIER REPRIT SON VOL.'];
-  // raccourcis d'entraînement : #calme (sans ennemis), #acte=2, #acte=3, #veilleur
-  const CALME = /calme/.test(location.hash);
+  // raccourcis d'entraînement : #calme (sans ennemis), #acte=2, #acte=3, #veilleur ; #essai expose des aides de test
+  const CALME = /calme/.test(location.hash), ESSAI = /essai/.test(location.hash);
   const DEPART = /veilleur/.test(location.hash) ? 3 : clamp((+((/acte=(\d)/.exec(location.hash) || [])[1]) || 1) - 1, 0, 2);
 
   // ================= Écran : basse résolution, agrandie en pixels nets =================
   const cvs = document.getElementById('ecran');
   const ctx = cvs.getContext('2d');
   const jeu = document.getElementById('jeu');
-  let W = 400, H = 224, SOL = 200, GA = 176, HORIZON = 140, PLAFOND = 30, ECHELLE = 3;
+  let W = 400, H = 224, SOL = 200, HORIZON = 140, ECHELLE = 3;   // SOL : ligne du sol à l'écran quand le dragon est posé
   let VIGNETTES = null, CIELS = null;
-  const plafond = () => (ACTES[acteVisuel].interieur ? 54 : 30);
   function disposer() {
     const vw = innerWidth, vh = innerHeight;
     const portrait = vh > vw * 1.05;
@@ -172,7 +169,7 @@
     cvs.width = W; cvs.height = H;
     cvs.style.width = W * ECHELLE + 'px'; cvs.style.height = H * ECHELLE + 'px';
     ctx.imageSmoothingEnabled = false;
-    SOL = H - 24; GA = SOL - G; HORIZON = SOL - 60; PLAFOND = plafond();
+    SOL = H - 24; HORIZON = SOL - 60;
     VIGNETTES = [construireVignette(0.62), construireVignette(0.44)];
     CIELS = [construireCiel(CIEL_NUIT), construireCiel(CIEL_ECLAIR)];
   }
@@ -189,9 +186,9 @@
     return c;
   }
   function construireCiel(pal) {
-    const c = toile(W, SOL + 2), g = c.getContext('2d'), n = pal.length, bande = Math.ceil(HORIZON / n);
+    const c = toile(W, H), g = c.getContext('2d'), n = pal.length, bande = Math.ceil(HORIZON / n);
     for (let i = 0; i < n; i++) { g.fillStyle = pal[i]; g.fillRect(0, i * bande, W, bande); }
-    g.fillStyle = pal[n - 1]; g.fillRect(0, n * bande, W, SOL + 2);
+    g.fillStyle = pal[n - 1]; g.fillRect(0, n * bande, W, H);
     for (let i = 0; i < n - 1; i++) {        // transitions tramées entre les bandes
       const y = (i + 1) * bande;
       g.fillStyle = pal[i + 1];
@@ -431,23 +428,6 @@
       for (let r = 0; r < 9; r++) { g.fillRect(X - 2 - r, base - 19 + r, 1 + r, 1); g.fillRect(X + 2, base - 19 + r, 1 + r, 1); }
     });
   }
-  function solTuile(base, tache, bord, deco) {
-    const c = toile(T, 48), g = c.getContext('2d');
-    g.fillStyle = base; g.fillRect(0, 0, T, 48);
-    for (let x = 0; x < T; x++) {
-      g.fillStyle = bord; g.fillRect(x, 0, 1, 1 + (hash(x) > 0.7 ? 1 : 0));
-      for (let y = 4; y < 48; y += 3) if (hash(x * 13 + y * 7) > 0.9) { g.fillStyle = tache; g.fillRect(x, y, 2, 1); }
-    }
-    if (deco === 'os') for (let i = 0; i < 12; i++) {
-      const x = Math.floor(hash(i * 17) * (T - 6)), y = 6 + Math.floor(hash(i * 29) * 24);
-      g.fillStyle = '#4a4048'; g.fillRect(x, y, 5, 1); g.fillRect(x, y - 1, 1, 3); g.fillRect(x + 4, y - 1, 1, 3);
-    }
-    if (deco === 'dalles') for (let r = 0; r < 4; r++) {
-      g.fillStyle = '#0a080e'; g.fillRect(0, 2 + r * 12, T, 1);
-      for (let x = (r % 2) * 16; x < T; x += 32) g.fillRect(x, 2 + r * 12, 1, 12);
-    }
-    return c;
-  }
   function decorTerres() {
     const lointain = tuileRelief((x) => 22 + 30 * tri(4 * x / T + 0.2) + 16 * tri(9 * x / T + 0.6) + 5 * onde(29, 0)(x), 84,
       (x, y, prof, pente) => (prof < 1 ? (pente < 0 ? '#3a2d45' : '#2a2233') : '#1b1524'));
@@ -458,7 +438,7 @@
     const proche = toile(T, 110), gp = proche.getContext('2d');
     for (let i = 0; i < 3; i++) arbreMort(gp, 70 + i * 170 + Math.floor(hash(i * 7) * 50), 110, 58 + hash(i) * 36, '#0a080e', i + 20);
     for (let i = 0; i < 6; i++) croix(gp, Math.floor(hash(i + 40) * T), 110, 9 + Math.floor(hash(i) * 6), '#0a080e', Math.round((hash(i * 9) - 0.5) * 4));
-    return { lointain, milieu, proche, sol: solTuile('#120e17', '#1d1724', '#2e2639', 'os'), exterieur: true };
+    return { lointain, milieu, proche, exterieur: true };
   }
   function decorCimetiere() {
     const lointain = toile(T, 90), gl = lointain.getContext('2d');
@@ -484,15 +464,15 @@
     mausolee(gp, 300, 110, 40, 38, '#09070c', '#1b1524');
     ange(gp, 200, 110, '#09070c'); ange(gp, 460, 110, '#09070c');
     for (let i = 0; i < 5; i++) tombe(gp, Math.floor(hash(i * 31) * T), 110, 9, 12 + Math.floor(hash(i) * 5), '#09070c');
-    return { lointain, milieu, proche, sol: solTuile('#100c15', '#1a1520', '#2a2233', null), exterieur: true };
+    return { lointain, milieu, proche, exterieur: true };
   }
   function decorCryptes() {
     // mur de pierre avec niches d'ossuaire
     const mur = toile(T, 340), gw = mur.getContext('2d');
-    gw.fillStyle = '#0d0a12'; gw.fillRect(0, 0, T, 340);
+    gw.fillStyle = '#0a080e'; gw.fillRect(0, 0, T, 340);
     for (let r = 0; r * 8 < 340; r++) for (let x = -(r % 2) * 8; x < T; x += 16) {
       const s = hash(r * 31 + x * 0.7);
-      gw.fillStyle = s > 0.86 ? '#241c2d' : s < 0.14 ? '#140f1a' : '#1b1522';
+      gw.fillStyle = s > 0.86 ? '#18131f' : s < 0.14 ? '#0d0a12' : '#120e18';
       gw.fillRect(x + 1, r * 8 + 1, 15, 7);
     }
     for (let j = 0; j < 4; j++) {
@@ -501,7 +481,7 @@
       for (let r = 0; r < 8; r++) gw.fillRect(nx + r, ny - r, 34 - 2 * r, 1);
       for (let row = 0; row < 3; row++) for (let k = 0; k < 4; k++) {
         const sx = nx + 3 + k * 8, sy = ny + 6 + row * 12;
-        gw.fillStyle = '#4f4450'; gw.fillRect(sx, sy, 6, 5); gw.fillRect(sx + 1, sy + 5, 4, 2);
+        gw.fillStyle = '#3e3549'; gw.fillRect(sx, sy, 6, 5); gw.fillRect(sx + 1, sy + 5, 4, 2);
         gw.fillStyle = '#07060b'; gw.fillRect(sx + 1, sy + 2, 1, 2); gw.fillRect(sx + 4, sy + 2, 1, 2);
       }
     }
@@ -522,7 +502,7 @@
       ga.fillStyle = '#2a2233'; ga.fillRect(cx - 9, 45, 1, 295); ga.fillRect(cx - 12, 40, 24, 1);
       ga.fillStyle = '#0a080e'; ga.fillRect(cx + 4, 45, 1, 295);
     }
-    return { mur, arcades, sol: solTuile('#17121e', '#201a28', '#2e2639', 'dalles'), exterieur: false };
+    return { mur, arcades, exterieur: false };
   }
   function construireLune() {
     const r = 17, o = r + 7, c = toile(o * 2, o * 2), g = c.getContext('2d');
@@ -557,6 +537,8 @@
     }
   }
   let eclair = 0, prochainEclair = 8;
+  // la caméra monte et descend : chaque plan du décor suit d'autant moins qu'il est loin
+  const monte = (f) => Math.round((NIV.depart[1] - camY - SOL) * f);
   function decor() {
     const D = DECORS[acteVisuel];
     if (D.exterieur) {
@@ -566,25 +548,29 @@
         const x = Math.round(((hash(i * 3.7) * 900 - cam * 0.02) % 900 + 900) % 900 - 200), y = 4 + Math.floor(hash(i * 9.1) * HORIZON * 0.45);
         if (x >= 0 && x < W && Math.sin(temps * 1.5 + i) > -0.2) { ctx.fillStyle = Math.sin(temps * 2.3 + i * 2) > 0.7 ? OS2 : '#4a3a55'; ctx.fillRect(x, y, 1, 1); }
       }
-      ctx.drawImage(LUNE, Math.round(W * 0.86) - (LUNE.width >> 1), Math.round(HORIZON * 0.36));
-      if (acteVisuel === 1) { ctx.fillStyle = '#100d17'; ctx.fillRect(Math.round(W * 0.86) - 30, Math.round(HORIZON * 0.36) + 20, 64, 2); ctx.fillRect(Math.round(W * 0.86) - 20, Math.round(HORIZON * 0.36) + 24, 50, 1); }
-      tuile(D.lointain, 0.08, SOL - 26 - D.lointain.height);
-      ctx.globalAlpha = 0.5; tuile(BRUME_T, 0.12, HORIZON + 8, temps * 5); ctx.globalAlpha = 1;
-      tuile(D.milieu, 0.3, SOL - 10 - D.milieu.height);
-      ctx.globalAlpha = 0.55; tuile(BRUME_T, 0.45, SOL - 30, -temps * 8); ctx.globalAlpha = 1;
-      tuile(D.proche, 0.62, SOL + 2 - D.proche.height);
+      const yl = Math.round(HORIZON * 0.36) + monte(0.04);
+      ctx.drawImage(LUNE, Math.round(W * 0.86) - (LUNE.width >> 1), yl);
+      if (acteVisuel === 1) { ctx.fillStyle = '#100d17'; ctx.fillRect(Math.round(W * 0.86) - 30, yl + 20, 64, 2); ctx.fillRect(Math.round(W * 0.86) - 20, yl + 24, 50, 1); }
+      tuile(D.lointain, 0.08, SOL - 26 - D.lointain.height + monte(0.12));
+      ctx.globalAlpha = 0.5; tuile(BRUME_T, 0.12, HORIZON + 8 + monte(0.16), temps * 5); ctx.globalAlpha = 1;
+      tuile(D.milieu, 0.3, SOL - 10 - D.milieu.height + monte(0.3));
+      ctx.globalAlpha = 0.55; tuile(BRUME_T, 0.45, SOL - 30 + monte(0.45), -temps * 8); ctx.globalAlpha = 1;
+      const yp = SOL + 2 + monte(0.6);
+      tuile(D.proche, 0.62, yp - D.proche.height);
+      if (yp < H) { ctx.fillStyle = '#0a080e'; ctx.fillRect(0, yp, W, H - yp); }   // sous l'horizon : la nuit du gouffre
     } else {
-      tuile(D.mur, 0.2, 0);
-      tuile(D.arcades, 0.5, 0);
-      bougies();
+      const ym = monte(0.2), ya = monte(0.5);
+      ctx.fillStyle = '#0d0a12'; ctx.fillRect(0, 0, W, H);
+      tuile(D.mur, 0.2, ym);
+      if (ya > 0) { ctx.fillStyle = '#07060b'; ctx.fillRect(0, 0, W, ya); }
+      tuile(D.arcades, 0.5, ya);
+      bougies(ya);
     }
-    tuile(D.sol, 1, SOL);
-    if (H - SOL > 48) { ctx.fillStyle = '#0d0a12'; ctx.fillRect(0, SOL + 48, W, H - SOL - 48); }
   }
-  function bougies() {
+  function bougies(oy) {
     const off = ((cam * 0.5) % T + T) % T;
     for (let base = -Math.floor(off); base < W + T; base += T) for (let j = 0; j < 4; j++) {
-      const x = base + 64 + j * 128, y = SOL - 78;
+      const x = base + 64 + j * 128, y = SOL - 78 + oy;
       if (x < -24 || x > W + 24) continue;
       const f = Math.sin(temps * 11 + j * 3 + base * 0.1) * 0.5 + 0.5;
       const halo = HALOS[f > 0.5 ? 1 : 0];
@@ -597,14 +583,14 @@
     }
   }
   function premierPlan() {
-    if (DECORS[acteVisuel].exterieur) return;
-    const pas = 460, off = cam * 1.3;
+    if (DECORS[acteVisuel].exterieur || arene) return;       // dans l'arène, la caméra est fixe : rien devant le combat
+    const pas = 460, off = cam * 1.3, o = monte(1.3);
     for (let k = Math.floor((off - 60) / pas); k * pas - off < W + 60; k++) {
       const x = Math.round(k * pas - off + hash(k) * 80);
-      ctx.fillStyle = '#040306'; ctx.fillRect(x, 0, 22, SOL + 30);
-      ctx.fillRect(x - 4, SOL - 6, 30, 8); ctx.fillRect(x - 4, 38, 30, 6);
-      ctx.fillStyle = '#1b1524'; ctx.fillRect(x + 21, 0, 1, SOL - 6);
-      const cx = Math.round((k + 0.5) * pas - off), long = 30 + Math.floor(hash(k * 3) * 40);
+      ctx.fillStyle = '#040306'; ctx.fillRect(x, 0, 22, H);
+      ctx.fillRect(x - 4, SOL - 6 + o, 30, 8); ctx.fillRect(x - 4, 38 + o, 30, 6);
+      ctx.fillStyle = '#1b1524'; ctx.fillRect(x + 21, 0, 1, H);
+      const cx = Math.round((k + 0.5) * pas - off), long = 30 + Math.floor(hash(k * 3) * 40) + o;
       ctx.fillStyle = '#2a2233';
       for (let y = 0; y < long; y += 4) ctx.fillRect(cx + ((y >> 2) & 1), y, 1, 3);
     }
@@ -618,7 +604,7 @@
       f.t += dt;
       f.y += (dedans ? -0.35 : 1) * f.v * dt;
       f.x += (f.d + Math.sin(f.t) * 4) * dt;
-      if (f.y > SOL) f.y -= SOL; if (f.y < 0) f.y += SOL;
+      if (f.y > H) f.y -= H; if (f.y < 0) f.y += H;
       if (f.x < 0) f.x += W; if (f.x > W) f.x -= W;
     }
     if (acteVisuel === 1 && etat !== 'titre') {
@@ -798,46 +784,313 @@
     else if (etat !== 'jeu') appui('fire');
   });
 
+  // ================= Niveaux : cases, collisions, objets (fichiers niveaux/acteN.txt) =================
+  const NIVEAUX = ["; Dragon Rider — niveau (une lettre = une case de 16 × 16 pixels ; les lignes commençant par ; sont ignorées)\n;  .  vide              #  roc                  =  corniche (on la traverse par-dessous, on s'y pose)\n;  ^  pics              x  mur fragile (feu ou ruée)          ~  courant ascendant (porte et rend le souffle)\n;  P  départ            E  sortie de l'acte     f  autel (point de reprise)\n;  h  cœur              r  relique\n;  c  charognard        a  âme errante          b  chauve-souris     s  spectre     k  crâne ardent\n;  V  le Veilleur (son arène)\n;  T  arbre mort        t  tombe                +  croix    (décor, sans collision)\n; Acte I · Les Terres Décharnées\n............................................................................................................................................#################.........................................................................\n............................................................................................................................................#################.........................................................................\n............................................................................................................................................#################.........................................................................\n...........................~~~..............................................................................................................#################.........................................................................\n...........................~~~......................................................................~~..............~~......................#################......................................~~.................................\n...........................~~~......................................................................~~..............~~......a...............#################.................a....................~~.................................\n...........................~~~...............r......c...............................................~~..............~~......................#################......................................~~...c.............................\n...........................~~~..............####....................c...............................~~.a............~~......................#################......................................~~.................................\n...........................~~~.c............####....................................................~~..............~~...r..................#################......................................~~.................................\n...........................~~~..............####....................................................~~..............~~.=====................#################...............#####...............a..~~.................................\n...........................~~~........a.....####====.......................c........................~~..=====.......~~......................................................x...#..................~~.................................\n...........................~~~..............####.......#######......................................~~........a.....~~...................................c..................x...#..................~~.................................\n...........................~~~..........====####.......#######......................................~~..............~~.......====..................c........................x.r.#..................~~.................................\n...........................~~~..............####.......x....##................................=====.~~...........h..~~.................................................###############.............~~.................................\n...........................~~~..............####.......x....##....................T..f..............~~.........=====~~.................................................###############.............~~.................................\n...........................~~~......t.......####..+....x..h.##..................###########.........~~..............~~..............T...t.......................+......###############.............~~.............+.....T.......E.....\n....P....T.....+....T......~~~....#############################.................###########.........~~..............~~...........#########################################################.........~~.........########################\n########################...~~~....#############################.^^^^^^^^^^^^^^^.###########.........~~..............~~...........#########################################################.^^^^^^^^^^^^^^^^^^.########################\n########################...~~~....#########################################################.........~~..............~~...........#####################################################################################################\n########################...~~~....#########################################################.........~~..............~~...........#####################################################################################################\n########################...~~~....#########################################################.........~~..............~~...........#####################################################################################################\n########################...~~~....#########################################################.........~~..............~~...........#####################################################################################################\n", "; Dragon Rider — niveau (une lettre = une case de 16 × 16 pixels ; les lignes commençant par ; sont ignorées)\n;  .  vide              #  roc                  =  corniche (on la traverse par-dessous, on s'y pose)\n;  ^  pics              x  mur fragile (feu ou ruée)          ~  courant ascendant (porte et rend le souffle)\n;  P  départ            E  sortie de l'acte     f  autel (point de reprise)\n;  h  cœur              r  relique\n;  c  charognard        a  âme errante          b  chauve-souris     s  spectre     k  crâne ardent\n;  V  le Veilleur (son arène)\n;  T  arbre mort        t  tombe                +  croix    (décor, sans collision)\n; Acte II · Le Cimetière des Rois\n......................................................................................................................................................................................................................................\n......................................................................................................................................................................................................................................\n.........................................................................................................................................b.b..........................................................................................\n................................................~~........................................................................................................~~..........................................................................\n......................................b.........~~..............................................................~~....b...................r...............~~..........................................................................\n....................................b...........~~..................b...........................................~~..b.................=========...........~~..........................................................................\n........................................b.......~~................b.....................................s.......~~......b...............#####.............~~............................................s........b....................\n................................................~~....................b.........................................~~......................#####.............~~s..................................................b......................\n........................s.......................~~................................s..........................r..~~......................#####.............~~....................c.....................................................\n...................................r............~~..s...................#########..........................=====~~......................#####.............~~..........................................................................\n.............................==#########==......~~......................#########...............................~~......................#####.............~~............................c.............................................\n...............................#########........~~......................x......##...............................~~................==#############==.......~~.....................................h....................................\n...............................#########........~~..............=====...x......##..................====.........~~..................#############.........~~................................==#######.................................\n...............................#########........~~......................x......##.........f.....................~~.====.............#############.........~~..................................#######.................................\n...............................#########........~~......................x...h..##....###########................~~..................#############.........~~..................................#######.................................\n....P.....t...+...t..^^^^^.....#########........~~........t...+.^^^^^.t.#########....###########................~~..........t...+...#############.t.....^^^^^^^......+....t...................#######........^^^^^.....t........E.....\n#############################################...~~.....#########################################................~~.......#############################################################################################################\n#############################################...~~.....#########################################................~~.......#############################################################################################################\n#############################################...~~.....#########################################................~~.......#############################################################################################################\n#############################################...~~.....#########################################................~~.......#############################################################################################################\n#############################################...~~.....#########################################................~~.......#############################################################################################################\n#############################################...~~.....#########################################................~~.......#############################################################################################################\n", "; Dragon Rider — niveau (une lettre = une case de 16 × 16 pixels ; les lignes commençant par ; sont ignorées)\n;  .  vide              #  roc                  =  corniche (on la traverse par-dessous, on s'y pose)\n;  ^  pics              x  mur fragile (feu ou ruée)          ~  courant ascendant (porte et rend le souffle)\n;  P  départ            E  sortie de l'acte     f  autel (point de reprise)\n;  h  cœur              r  relique\n;  c  charognard        a  âme errante          b  chauve-souris     s  spectre     k  crâne ardent\n;  V  le Veilleur (son arène)\n;  T  arbre mort        t  tombe                +  croix    (décor, sans collision)\n; Acte III · Les Cryptes\n##################################################################################################################################################################################################################\n##################################################################################################################################################################################################################\n##################################################################################################################################################################################################################\n..............##................................#############.............##..........##........................................................................##............................................####\n..............##................................#############.............##..........##........................................................................##............................................####\n..............##................................x........####.............##..........##....................~~..................................................##............................................####\n..............##................................x........####.............##........b.##....................~~..................................................##............................................####\n..............##....b...........................x........####.............##..........##........s...........~~..................................................##............................................####\n..............##......##.............s..........x........####.............##..........##..................k.~~..................................................##............................................####\n..............##...b..##........................x.....r..####.............##....##....##....##..............~~.........................s........................##............................................####\n..............##......##........................#############...###.......##....##....##....##..............~~...r..............................................##..............................V.............####\n..............##......##...............====.....#############...###.......##....##....##....##..............~~..====............................................##............................................####\n..............##......##...k....................................###.......##....##....##....##..............~~..............#######...........b.................##............................................####\n..............##......##........====............................###.f...........##..........##........====..~~..............#######....................f........##............................................####\n..............##......##....................................b...###====.........##..........##..............~~..............x.....#.........b.........====....................................................####\n......................##..........................k.............###...........k.##........k.##..............~~..............x.....#.............k.............................................................####\n......................##..................................b.....###.............##..........##..............~~..............x.....#...........................................................................####\n......................##........................................###.............##..........##..............~~..............x..h..#...........................................................................####\n....P.................##......^^^^^^^^^^^^^^^...................###.............##..........##..............~~..............#######...........................................................................####\n####################################################################################################........~~.........###########################################################################################\n####################################################################################################........~~.........###########################################################################################\n####################################################################################################^^^^^^^^^^^^^^^^^^^###########################################################################################\n"];
+  const TP = 16;                                           // une case = 16 × 16 pixels
+  const VIDE = 0, ROC = 1, CORNICHE = 2, PICS = 3, FRAGILE = 4, COURANT = 5;
+  const CASES = { '#': ROC, '=': CORNICHE, '^': PICS, 'x': FRAGILE, '~': COURANT };
+  const ENNEMIS_CARTE = { c: 'charognard', a: 'ame', b: 'chauve', s: 'spectre', k: 'crane' };
+  // zone de collision du dragon, autour de son corps ; en vol, le bas s'arrête là où l'atterrissage commence
+  const LARG = 24, HAUT = 12, BAS = G - AN.land.bodyY[0], CORPS_SOL = 44;
+  let NIV = null;
+  function lireNiveau(n) {
+    const lignes = NIVEAUX[n].split('\n').filter((l) => !l.startsWith(';')).map((l) => l.replace(/\s+$/, ''));
+    while (lignes.length && !lignes[lignes.length - 1]) lignes.pop();
+    const h = lignes.length, l = Math.max(...lignes.map((x) => x.length));
+    const niv = { acte: n, l, h, cases: new Uint8Array(l * h), objets: [], courants: [], largeur: l * TP, hauteur: h * TP,
+                  depart: [TP * 3, TP * (h - 2)], reprise: null, veilleur: null, sortie: null, arene: null, reliques: 0, prises: 0 };
+    lignes.forEach((ligne, ty) => [...ligne.padEnd(l, '.')].forEach((ch, tx) => {
+      const x = tx * TP + TP / 2, y = ty * TP + TP / 2, sol = (ty + 1) * TP;
+      if (CASES[ch] !== undefined) niv.cases[ty * l + tx] = CASES[ch];
+      else if (ENNEMIS_CARTE[ch]) niv.objets.push({ genre: 'ennemi', type: ENNEMIS_CARTE[ch], x, y });
+      else if (ch === 'h') niv.objets.push({ genre: 'coeur', x, y });
+      else if (ch === 'r') { niv.objets.push({ genre: 'relique', x, y }); niv.reliques++; }
+      else if (ch === 'f') niv.objets.push({ genre: 'autel', x, y: sol });
+      else if (ch === 'T' || ch === 't' || ch === '+') niv.objets.push({ genre: 'decor', type: ch, x, y: sol });
+      else if (ch === 'P') niv.depart = [x, sol];
+      else if (ch === 'E') niv.sortie = { x, y: sol };
+      else if (ch === 'V') niv.veilleur = { x, y };
+    }));
+    for (let tx = 0; tx < l; tx++) {                        // colonnes de courant ascendant, pour l'effet visuel
+      let debut = -1;
+      for (let ty = 0; ty <= h; ty++) {
+        const c = ty < h && niv.cases[ty * l + tx] === COURANT;
+        if (c && debut < 0) debut = ty;
+        if (!c && debut >= 0) { niv.courants.push({ x: tx * TP, y0: debut * TP, y1: ty * TP }); debut = -1; }
+      }
+    }
+    return niv;
+  }
+  // hors de la carte : roc sur les côtés et au-dessus (on ne sort pas), vide en dessous (le gouffre)
+  const caseA = (tx, ty) => (tx < 0 || tx >= NIV.l || ty < 0 ? ROC : ty >= NIV.h ? VIDE : NIV.cases[ty * NIV.l + tx]);
+  const bloque = (t) => t === ROC || t === FRAGILE;
+  function briser(tx, ty) {               // un mur fissuré s'effondre d'un bloc : toutes les cases fragiles qui se touchent
+    const pile = [[tx, ty]];
+    while (pile.length) {
+      const [x, y] = pile.pop();
+      if (caseA(x, y) !== FRAGILE || y >= NIV.h) continue;
+      NIV.cases[y * NIV.l + x] = VIDE;
+      for (let i = 0; i < 9; i++) particule({ x: x * TP + rand(2, 14), y: y * TP + rand(2, 14), vx: rand(-90, 90), vy: rand(-130, -20), vie: rand(0.5, 0.9), max: 0.9, t: 2, rot: rand(0, 6), genre: 'gravat' });
+      pile.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]);
+    }
+    sfx('boum'); secousse = Math.max(secousse, 0.15);
+  }
+  function toucheCase(type, x0, y0, x1, y1) {
+    for (let ty = Math.floor(y0 / TP); ty <= Math.floor(y1 / TP); ty++)
+      for (let tx = Math.floor(x0 / TP); tx <= Math.floor(x1 / TP); tx++) if (caseA(tx, ty) === type) return true;
+    return false;
+  }
+  // en vol : la boîte du dragon glisse contre le roc, se pose sur le sol et les corniches, brise ce qui est fragile en ruée
+  function deplacerVol(dx, dy) {
+    const r = { sol: null, plafond: false, mur: false };
+    if (dx) {
+      P.x += dx;
+      const tx = Math.floor((dx > 0 ? P.x + LARG : P.x - LARG) / TP), ty0 = Math.floor((P.y - HAUT) / TP), ty1 = Math.floor((P.y + BAS - 1) / TP);
+      if (P.ruee >= 0) for (let ty = ty0; ty <= ty1; ty++) if (caseA(tx, ty) === FRAGILE) briser(tx, ty);
+      for (let ty = ty0; ty <= ty1; ty++) {
+        if (bloque(caseA(tx, ty))) { P.x = dx > 0 ? tx * TP - LARG - 0.01 : (tx + 1) * TP + LARG + 0.01; r.mur = true; break; }
+      }
+    }
+    if (dy) {
+      const basAvant = P.y + BAS;
+      P.y += dy;
+      const x0 = Math.floor((P.x - LARG + 1) / TP), x1 = Math.floor((P.x + LARG - 1) / TP);
+      if (dy > 0) {
+        const ty = Math.floor((P.y + BAS) / TP);
+        for (let tx = x0; tx <= x1; tx++) {
+          const t = caseA(tx, ty);
+          if (bloque(t) || (t === CORNICHE && basAvant <= ty * TP + 0.5)) { P.y = ty * TP - BAS; r.sol = ty * TP; break; }
+        }
+      } else {
+        const ty = Math.floor((P.y - HAUT) / TP);
+        for (let tx = x0; tx <= x1; tx++) {
+          const t = caseA(tx, ty);
+          if (t === FRAGILE && P.ruee >= 0) { briser(tx, ty); continue; }
+          if (bloque(t)) { P.y = (ty + 1) * TP + HAUT; r.plafond = true; break; }
+        }
+      }
+    }
+    return r;
+  }
+  // au sol : on avance contre les murs ; le sol continue-t-il sous les pattes ?
+  function deplacerSol(dx) {
+    if (!dx) return false;
+    P.x += dx;
+    const tx = Math.floor((dx > 0 ? P.x + LARG : P.x - LARG) / TP), ty0 = Math.floor((P.sol - CORPS_SOL) / TP), ty1 = Math.floor((P.sol - 2) / TP);
+    if (P.ruee >= 0) for (let ty = ty0; ty <= ty1; ty++) if (caseA(tx, ty) === FRAGILE) briser(tx, ty);
+    for (let ty = ty0; ty <= ty1; ty++) {
+      if (!bloque(caseA(tx, ty))) continue;
+      if (ty === ty1 && marcheLibre(tx, ty1 * TP)) { P.sol = ty1 * TP; return false; }   // une marche d'une case : on l'enjambe
+      P.x = dx > 0 ? tx * TP - LARG - 0.01 : (tx + 1) * TP + LARG + 0.01; return true;
+    }
+    return false;
+  }
+  function marcheLibre(tx, sol) {          // la place pour le corps au-dessus de la marche
+    const x0 = Math.floor((P.x - LARG) / TP), x1 = Math.floor((P.x + LARG) / TP);
+    for (let ty = Math.floor((sol - CORPS_SOL) / TP); ty < sol / TP; ty++)
+      for (let x = Math.min(x0, tx); x <= Math.max(x1, tx); x++) if (bloque(caseA(x, ty))) return false;
+    return true;
+  }
+  function appuiOuMarche() {               // le sol continue, ou descend d'une marche
+    if (appuiSous()) return true;
+    P.sol += TP;
+    if (appuiSous()) return true;
+    P.sol -= TP;
+    return false;
+  }
+  function appuiSous() {
+    const ty = Math.floor(P.sol / TP);
+    for (let tx = Math.floor((P.x - LARG * 0.6) / TP); tx <= Math.floor((P.x + LARG * 0.6) / TP); tx++) {
+      const t = caseA(tx, ty);
+      if (bloque(t) || t === CORNICHE) return true;
+    }
+    return false;
+  }
+  function solSous(x, y) {
+    const tx = Math.floor(x / TP);
+    for (let ty = Math.max(0, Math.floor(y / TP)); ty < NIV.h; ty++) { const t = caseA(tx, ty); if (bloque(t) || t === CORNICHE) return ty * TP; }
+    return null;
+  }
+
+  // ---------- tuiles et accessoires, dessinés en pixel art pour chaque acte ----------
+  let TUILES = null, ACCESSOIRES = null;
+  function construireTuiles() {
+    const styles = [
+      { fond: '#1b1524', grains: ['#261e30', '#140f1a'], lumiere: '#7a6670', bord: '#4a3a55', bord2: '#2e2439', flanc: '#2a2233', herbe: '#5a4656', corniche: ['#7a6670', '#3a2d45', '#140f1a'] },
+      { fond: '#17121e', grains: ['#221b2a', '#110d16'], lumiere: '#827889', bord: '#4b4156', bord2: '#2a2233', flanc: '#241c2e', herbe: '#4b4156', corniche: ['#827889', '#3e3549', '#110d16'] },
+      { fond: '#241c2e', grains: ['#2e2639', '#0d0a12'], lumiere: '#827889', bord: '#4b4156', bord2: '#332b3d', flanc: '#332b3d', briques: true, corniche: ['#827889', '#4b4156', '#120e18'] },
+    ];
+    return styles.map((st, a) => {
+      const roc = [0, 1, 2, 3].map((v) => {
+        const c = toile(TP, TP), g = c.getContext('2d');
+        g.fillStyle = st.fond; g.fillRect(0, 0, TP, TP);
+        for (let y = 0; y < TP; y++) for (let x = 0; x < TP; x++) {
+          const h = hash(v * 131 + x * 17 + y * 7 + a * 3);
+          if (h > 0.9) { g.fillStyle = st.grains[0]; g.fillRect(x, y, 1, 1); } else if (h < 0.06) { g.fillStyle = st.grains[1]; g.fillRect(x, y, 1, 1); }
+        }
+        if (st.briques) {
+          const j0 = v & 1 ? 4 : 11, j1 = v & 1 ? 11 : 4;
+          g.fillStyle = st.grains[1]; g.fillRect(0, 7, TP, 1); g.fillRect(0, 15, TP, 1); g.fillRect(j0, 0, 1, 7); g.fillRect(j1, 8, 1, 7);
+          g.fillStyle = st.grains[0]; g.fillRect(0, 0, TP, 1); g.fillRect(0, 8, TP, 1); g.fillRect(j0 + 1, 0, 1, 7); g.fillRect(j1 + 1, 8, 1, 7);
+        }
+        return c;
+      });
+      const fragile = toile(TP, TP), gf = fragile.getContext('2d');
+      gf.drawImage(roc[0], 0, 0); gf.fillStyle = '#6b5a64';
+      [[3, 2], [4, 3], [5, 4], [5, 5], [6, 6], [7, 7], [8, 6], [9, 7], [10, 8], [10, 9], [11, 10], [6, 8], [5, 9], [4, 10], [4, 11], [12, 11], [12, 12], [8, 12], [7, 13]].forEach(([x, y]) => gf.fillRect(x, y, 1, 1));
+      gf.fillStyle = '#3a2d45'; gf.fillRect(0, 0, TP, 1); gf.fillRect(0, 0, 1, TP);
+      const pics = toile(TP, TP), gp = pics.getContext('2d');
+      for (const x0 of [1, 6, 11]) for (let r = 0; r < 11; r++) {
+        const w = Math.max(1, Math.round(4 * (1 - r / 11))), x = x0 + Math.round((4 - w) / 2);
+        gp.fillStyle = r > 6 ? OS : OS2; gp.fillRect(x, TP - 1 - r, w, 1);
+        gp.fillStyle = CENDRE; gp.fillRect(x + w - 1, TP - 1 - r, 1, 1);
+      }
+      const corniche = toile(TP, 7), gc = corniche.getContext('2d');
+      gc.fillStyle = st.corniche[1]; gc.fillRect(0, 0, TP, 6);
+      gc.fillStyle = st.corniche[0]; gc.fillRect(0, 0, TP, 1);
+      gc.fillStyle = st.corniche[2]; gc.fillRect(0, 5, TP, 1); gc.fillRect(3, 6, 2, 1); gc.fillRect(11, 6, 2, 1);
+      return { roc, fragile, pics, corniche, st };
+    });
+  }
+  function construireAccessoires() {
+    const arbre = toile(60, 72); arbreMort(arbre.getContext('2d'), 30, 72, 66, '#0e0a13', 3);
+    const tombe_ = toile(12, 17); tombe(tombe_.getContext('2d'), 1, 16, 10, 15, '#0e0a13');
+    const g = tombe_.getContext('2d'); g.fillStyle = '#2a2233'; g.fillRect(5, 5, 2, 1); g.fillRect(4, 6, 1, 4);
+    const croix_ = toile(16, 22); croix(croix_.getContext('2d'), 8, 22, 20, '#0e0a13', 1);
+    return { T: arbre, t: tombe_, '+': croix_ };
+  }
+  function dessinerTuiles() {
+    const T = TUILES[acteVisuel], st = T.st;
+    const tx0 = Math.max(0, Math.floor(cam / TP) - 1), tx1 = Math.min(NIV.l - 1, Math.floor((cam + W) / TP) + 1);
+    const ty0 = Math.max(0, Math.floor(camY / TP) - 1), ty1 = Math.min(NIV.h - 1, Math.floor((camY + H) / TP) + 1);
+    for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) {
+      const t = caseA(tx, ty), x = tx * TP, y = ty * TP;
+      if (t === ROC || t === FRAGILE) {
+        ctx.drawImage(t === FRAGILE ? T.fragile : T.roc[(tx * 7 + ty * 3) & 3], x, y);
+        if (ty > 0 && !bloque(caseA(tx, ty - 1))) {           // le dessus éclairé par la lune : c'est là qu'on se pose
+          ctx.fillStyle = st.lumiere; ctx.fillRect(x, y, TP, 1);
+          ctx.fillStyle = st.bord; ctx.fillRect(x, y + 1, TP, 2);
+          ctx.fillStyle = st.bord2; ctx.fillRect(x, y + 3, TP, 1);
+          for (let k = tx & 1; k < TP; k += 2) ctx.fillRect(x + k, y + 4, 1, 1);
+          if (!st.briques && hash(tx * 3.3 + ty) > 0.45) { ctx.fillStyle = st.herbe; ctx.fillRect(x + Math.floor(hash(tx) * 12), y - 1, 1, 1); ctx.fillRect(x + Math.floor(hash(tx * 7) * 12) + 2, y - 2, 1, 2); }
+        }
+        if (tx > 0 && !bloque(caseA(tx - 1, ty))) { ctx.fillStyle = st.flanc; ctx.fillRect(x + 1, y, 1, TP); ctx.fillStyle = ENCRE; ctx.fillRect(x, y, 1, TP); }
+        if (tx < NIV.l - 1 && !bloque(caseA(tx + 1, ty))) { ctx.fillStyle = st.flanc; ctx.fillRect(x + TP - 2, y, 1, TP); ctx.fillStyle = ENCRE; ctx.fillRect(x + TP - 1, y, 1, TP); }
+        if (ty < NIV.h - 1 && !bloque(caseA(tx, ty + 1))) { ctx.fillStyle = ENCRE; ctx.fillRect(x, y + TP - 1, TP, 1); }
+      } else if (t === CORNICHE) ctx.drawImage(T.corniche, x, y);
+      else if (t === PICS) ctx.drawImage(T.pics, x, y);
+    }
+  }
+  function dessinerCourants() {           // colonnes de cendre qui montent : on voit où le vent porte
+    ctx.fillStyle = CENDRE;
+    for (const c of NIV.courants) {
+      if (c.x + TP < cam || c.x > cam + W || c.y1 < camY || c.y0 > camY + H) continue;
+      for (let i = 0; i < 3; i++) {
+        const x = c.x + 3 + i * 5, dec = (temps * (70 + i * 14) + hash(c.x + i) * 30) % 22;
+        for (let y = c.y1 - dec; y > c.y0; y -= 22) { ctx.globalAlpha = 0.3 + 0.25 * Math.sin(y * 0.1 + i + temps); ctx.fillRect(x, Math.round(y), 1, 6); }
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+  function dessinerObjets() {
+    for (const o of NIV.objets) {
+      if (o.x < cam - 70 || o.x > cam + W + 70 || o.y < camY - 90 || o.y > camY + H + 90) continue;
+      if (o.genre === 'decor') { const img = ACCESSOIRES[o.type]; ctx.drawImage(img, Math.round(o.x - img.width / 2), o.y - img.height); }
+      else if (o.genre === 'autel') {
+        const x = Math.round(o.x), y = o.y;
+        ctx.fillStyle = '#2e2439'; ctx.fillRect(x - 7, y - 4, 15, 4); ctx.fillStyle = '#3a2d45'; ctx.fillRect(x - 3, y - 12, 7, 8);
+        ctx.fillStyle = '#4a3a55'; ctx.fillRect(x - 6, y - 15, 13, 3); ctx.fillStyle = ENCRE; ctx.fillRect(x - 6, y - 12, 13, 1);
+        if (o.allume) {
+          const f = Math.sin(temps * 12 + x) > 0;
+          ctx.drawImage(HALOS[f ? 1 : 0], x - (HALOS[0].width >> 1), y - 20 - (HALOS[0].height >> 1));
+          ctx.fillStyle = FEU[3]; ctx.fillRect(x - 3, y - 19, 7, 4); ctx.fillStyle = FEU[1]; ctx.fillRect(x - 2, y - 21 - (f ? 1 : 0), 5, 4); ctx.fillStyle = FEU[0]; ctx.fillRect(x - 1, y - 20, 3, 2);
+        } else { ctx.fillStyle = '#5e2f3c'; ctx.fillRect(x - 1, y - 16, 3, 1); }
+      } else if ((o.genre === 'relique' || o.genre === 'coeur') && !o.pris) {
+        const y = Math.round(o.y + Math.sin(temps * 3 + o.x) * 2);
+        if (o.genre === 'coeur') { coeur(Math.round(o.x) - 3, y - 3, true); continue; }
+        const x = Math.round(o.x);
+        ctx.fillStyle = ENCRE; ctx.fillRect(x - 3, y - 6, 7, 13); ctx.fillRect(x - 5, y - 3, 11, 5);
+        ctx.fillStyle = OS2; ctx.fillRect(x - 2, y - 5, 5, 11); ctx.fillRect(x - 4, y - 2, 9, 3);
+        ctx.fillStyle = OS; ctx.fillRect(x - 1, y - 5, 2, 10); ctx.fillRect(x - 4, y - 2, 8, 1);
+        ctx.fillStyle = SANG_VIF; ctx.fillRect(x - 1, y - 2, 3, 3); ctx.fillStyle = '#ffb09a'; ctx.fillRect(x, y - 2, 1, 1);
+        if (Math.sin(temps * 5 + o.x) > 0.85) { ctx.fillStyle = '#ffffff'; ctx.fillRect(x + 4, y - 7, 1, 3); ctx.fillRect(x + 3, y - 6, 3, 1); }
+      }
+    }
+    const s = NIV.sortie;
+    if (s && s.x > cam - 40 && s.x < cam + W + 40) {         // la porte de l'acte : une ogive sombre
+      const x = Math.round(s.x), y = s.y;
+      ctx.fillStyle = '#3a2d45'; ctx.fillRect(x - 15, y - 40, 30, 40);
+      for (let r = 0; r < 10; r++) { const w = Math.round(15 * Math.sqrt(1 - (r / 10) ** 2)); ctx.fillRect(x - w, y - 40 - r, w * 2, 1); }
+      ctx.fillStyle = ENCRE; ctx.fillRect(x - 10, y - 34, 20, 34);
+      for (let r = 0; r < 8; r++) { const w = Math.round(10 * Math.sqrt(1 - (r / 8) ** 2)); ctx.fillRect(x - w, y - 34 - r, w * 2, 1); }
+      ctx.fillStyle = '#2e2439';
+      for (let yy = y - 40; yy < y; yy += 2) for (let xx = x - 9; xx < x + 10; xx += 2) if (Math.sin(temps * 2 + yy * 0.3 + xx) > 0.4) ctx.fillRect(xx + ((yy >> 1) & 1), yy, 1, 1);
+    }
+  }
+
   // ================= État du jeu =================
   let etat = 'titre', P = null, ennemis = [], boules = [], orbes = [], coeurs = [], particules = [], popups = [], ombres = [];
-  let cam = 0, temps = 0, score = 0, record = 0, combo = 0, dernierKill = -9, prochain = 2, secousse = 0, gel = 0, finT = 0, tenuBas = false;
+  let cam = 0, camY = 0, temps = 0, score = 0, record = 0, combo = 0, dernierKill = -9, secousse = 0, gel = 0, finT = 0, tenuBas = false;
   let acte = 0, acteVisuel = 0, carte = null, arene = false, veilleur = null, cycle = 1, epiT = 0;
   try { record = +localStorage.getItem('dragon-rider-record') || 0; } catch {}
 
-  function joueurNeuf(x) {
+  function joueurNeuf(x, sol) {
     return {
-      x, y: HORIZON - 30, vx: 0, vy: 0, face: 1, fs: 1, mode: 'air', at: 0,
+      x, y: sol - G + AN.land.bodyY[AN.land.frames - 1], sol, vx: 0, vy: 0, face: 1, fs: 1, mode: 'ground', at: 0,
       ph: 0, cad: 1.15, amp: 1, plane: 0, replie: 0, haut: 0, pitch: 0, pitchV: 0, queue: 0, queueV: 0, bob: 0,
       croisiere: 0, atk: -1, tire: false, cd: 0, recul: 0, mal: -1, inv: 0, flash: 0, pv: PV_MAX,
-      ruee: -1, rueeDir: [1, 0], rueeCd: 0, charge: 1, elan: 0, envol: false, accroupi: 0, course: 0, pas: 0, ombreT: 0, impact: 0,
+      ruee: -1, rueeDir: [1, 0], rueeCd: 0, charge: 1, envol: false, accroupi: 0, course: 0, pas: 0, ombreT: 0, impact: 0,
+      souffle: 1, dernierSol: [x, sol],
     };
   }
   function vider() { ennemis = []; boules = []; orbes = []; coeurs = []; particules = []; popups = []; ombres = []; }
+  function cadrer() {
+    cam = clamp(P.x - W * 0.38, 0, Math.max(0, NIV.largeur - W));
+    camY = clamp(P.y - H * 0.55, 0, Math.max(0, NIV.hauteur - H));
+  }
+  // entrer dans un niveau : neuf, ou repris à l'autel (reliques prises, murs brisés et ennemis vaincus le restent)
+  function entrerNiveau(n, reprise) {
+    const pv = P ? P.pv : PV_MAX;
+    acte = n; acteVisuel = n; arene = false; veilleur = null; vider();
+    if (!reprise || !NIV || NIV.acte !== n) NIV = lireNiveau(n);
+    else NIV.objets.forEach((o) => { if (o.genre === 'ennemi' && !o.mort) o.actif = false; });
+    const [x, sol] = reprise && NIV.reprise ? NIV.reprise : NIV.depart;
+    P = joueurNeuf(x, sol);
+    P.pv = reprise ? PV_MAX : pv;
+    cadrer();
+  }
   function modeTitre() {
-    etat = 'titre'; acte = 0; acteVisuel = 0; PLAFOND = plafond(); arene = false; veilleur = null; carte = null;
-    P = joueurNeuf(cam + W * 0.4); vider(); prochain = 1.2;
+    etat = 'titre'; carte = null; P = null;
+    entrerNiveau(0, false);
+    P.mode = 'air'; P.x = 220; P.y = NIV.depart[1] - SOL + 108; cadrer(); camY = NIV.depart[1] - SOL;
   }
   function lancerActe(n, depuisLeNoir) {
-    acte = n;
-    carte = { titre: 'ACTE ' + ACTES[n].num, nom: ACTES[n].nom, sous: ACTES[n].sous, t: depuisLeNoir ? 0.45 : 0, fondu: true, bascule: false, acte: n };
+    carte = { titre: 'ACTE ' + ACTES[n].num, nom: ACTES[n].nom, sous: ACTES[n].sous, t: depuisLeNoir ? 0.45 : 0, fondu: true, bascule: depuisLeNoir, acte: n };
+    if (depuisLeNoir) entrerNiveau(n, false);
     sfx('glas');
   }
-  function demarrer(n, auVeilleur) {
-    arene = false; veilleur = null; vider();
-    const x = auVeilleur ? ARENE - 70 : ACTES[n].debut + 110;
-    P = joueurNeuf(x); cam = x - W * 0.3; prochain = 2.4; finT = 0;
-    lancerActe(n, true);
+  function nouvellePartie() {
+    etat = 'jeu'; cycle = 1; score = 0; combo = 0; P = null;
+    lancerActe(DEPART === 3 ? 2 : DEPART, true);
+    if (DEPART === 3 && NIV.veilleur) {                  // entraînement : juste avant l'arène
+      const x = NIV.veilleur.x - W * 0.8, sol = solSous(x, NIV.veilleur.y);
+      P = joueurNeuf(x, sol); cadrer();
+    }
   }
-  function nouvellePartie() { etat = 'jeu'; cycle = 1; score = 0; combo = 0; demarrer(DEPART === 3 ? 2 : DEPART, DEPART === 3); }
-  function reprendre() { etat = 'jeu'; combo = 0; demarrer(acte, arene); }
-  function nouveauCycle() { etat = 'jeu'; cycle++; combo = 0; demarrer(0, false); }
+  function reprendre() {
+    etat = 'jeu'; combo = 0;
+    carte = { titre: 'ACTE ' + ACTES[acte].num, nom: ACTES[acte].nom, sous: NIV.reprise ? "L'AUTEL VOUS RAPPELLE." : ACTES[acte].sous, t: 0.45, fondu: true, bascule: true, acte };
+    entrerNiveau(acte, true); sfx('glas');
+  }
+  function nouveauCycle() { etat = 'jeu'; cycle++; combo = 0; P = null; lancerActe(0, true); }
 
   function majCarte(dt) {
     if (!carte) return;
     carte.t += dt;
     if (carte.fondu && !carte.bascule && carte.t >= 0.45) {
-      carte.bascule = true; acteVisuel = carte.acte; PLAFOND = plafond(); ennemis = []; orbes = [];
-      if (P.y < PLAFOND + 18) P.y = PLAFOND + 18;
+      carte.bascule = true;
+      const pv = Math.min(PV_MAX, P.pv + 2);
+      entrerNiveau(carte.acte, false); P.pv = pv;
     }
     if (carte.t > (carte.fondu ? 3.7 : 2.9)) carte = null;
   }
@@ -851,10 +1104,11 @@
     return 0.45 * (1 - (t - 3.1) / 0.6);
   }
   function progression() {
-    if (arene) return;
-    const a = P.x >= ACTES[2].debut ? 2 : P.x >= ACTES[1].debut ? 1 : 0;
-    if (a > acte) { lancerActe(a, false); P.pv = Math.min(PV_MAX, P.pv + 2); }
-    if (acte === 2 && P.x >= ARENE) entrerArene();
+    if (!NIV || (carte && carte.fondu) || P.pv <= 0) return;
+    const s = NIV.sortie;
+    // la porte : il suffit que le corps du dragon la touche, à pied ou en vol
+    if (s && acte < 2 && Math.abs(P.x - s.x) < 15 + LARG && P.y + BAS > s.y - 50 && P.y - HAUT < s.y) { lancerActe(acte + 1, false); P.inv = 3; }
+    if (NIV.veilleur && !arene && P.x >= NIV.veilleur.x - W * 0.62) entrerArene();
   }
 
   function popup(txt, x, y, teinte = OS, k = 1) { popups.push({ txt, x, y, teinte, k, vie: 1.1 }); }
@@ -894,14 +1148,23 @@
     const p = vole ? P.pitch : 0, c = Math.cos(p), s = Math.sin(p);
     const mx = BOUCHE.x, my = BOUCHE.y + (vole ? P.bob : 0);
     const bx = P.x + P.face * (mx * c - my * s), by = P.y + (mx * s + my * c);
+    P.recul = 1; sfx('feu');
+    // collé à un mur, la gueule dépasse de l'autre côté : le feu part du corps et s'arrête à la première pierre
+    for (let k = 0; k <= 1; k += 1 / 16) {
+      const x = mix(P.x, bx, k), y = mix(P.y, by, k), tx = Math.floor(x / TP), ty = Math.floor(y / TP), t = caseA(tx, ty);
+      if (!bloque(t)) continue;
+      if (t === FRAGILE) briser(tx, ty);
+      explosionSol(x - P.face * 4, y);
+      particule({ x: x - P.face * 4, y, vie: 0.07, max: 0.07, genre: 'bouche' });
+      return;
+    }
     boules.push({ x: bx, y: by, vx: P.face * c * V.BOULE + P.vx * 0.3, vy: s * V.BOULE + P.vy * 0.2, vie: 1.3, trace: [] });
     for (let i = 0; i < 10; i++) particule({ x: bx, y: by, vx: P.face * rand(40, 200), vy: rand(-60, 60), vie: rand(0.15, 0.3), max: 0.3, t: 1 });
     particule({ x: bx + P.face * 3, y: by, vie: 0.07, max: 0.07, genre: 'bouche' });
-    P.recul = 1; sfx('feu');
   }
   function demarrerRuee(versLeBas) {
     const depuisLeSol = auSol();
-    if (depuisLeSol) { P.mode = 'air'; P.at = 0; P.ph = 0.05; P.amp = 1; P.pitch = -0.2; P.y = GA + AN.land.bodyY[0] - 2; poussiere(P.x, SOL, 8, 1.3); }
+    if (depuisLeSol) { P.mode = 'air'; P.at = 0; P.ph = 0.05; P.amp = 1; P.pitch = -0.2; P.y = P.sol - BAS - 2; poussiere(P.x, P.sol, 8, 1.3); }
     P.ruee = 0; P.rueeCd = 0.55; P.inv = Math.max(P.inv, 0.35); P.atk = -1;
     P.rueeDir = depuisLeSol ? [P.face * 0.94, -0.36] : versLeBas ? [P.face * 0.7, 0.72] : [P.face, 0];
     popup(versLeBas && !depuisLeSol ? 'PIQUÉ !' : 'RUÉE !', P.x, P.y - 34, OS);
@@ -919,20 +1182,34 @@
       sfx('chute');
     } else {
       P.mal = 0;
-      if (P.mode !== 'air') { P.mode = 'air'; P.at = 0; P.ph = 0; P.pitch = 0; P.y = Math.min(P.y, GA + AN.land.bodyY[0] - 2); }
+      if (P.mode !== 'air') { P.mode = 'air'; P.at = 0; P.ph = 0; P.pitch = 0; P.y = Math.min(P.y, P.sol - BAS - 2); }
       P.vy = -80; P.pitchV += Math.random() < 0.5 ? 9 : -9;
     }
   }
-  function atterrir() {
-    P.impact = P.vy; P.mode = 'land'; P.at = 0; P.vy = 0; P.pitch = 0; P.pitchV = 0;
+  function atterrir(sol) {
+    P.impact = P.vy; P.mode = 'land'; P.at = 0; P.vy = 0; P.pitch = 0; P.pitchV = 0; P.sol = sol;
     const fort = P.impact > 170 || P.ruee >= 0;
     P.ruee = -1;
-    poussiere(P.x - P.face * 10, SOL, fort ? 14 : 6, fort ? 1.5 : 0.8);
+    poussiere(P.x - P.face * 10, sol, fort ? 14 : 6, fort ? 1.5 : 0.8);
     if (fort) secousse = Math.max(secousse, 0.14);
     sfx('pose');
   }
 
   // ---------- mise à jour du dragon ----------
+  function tomber() {                    // le sol s'arrête : le dragon ouvre les ailes et reprend l'air
+    P.mode = 'air'; P.at = 0; P.y = P.sol - BAS - 1; P.vy = 30; P.ph = 0.2; P.amp = 1; P.cad = 1.6;
+    P.pitch = 0.1; P.pitchV = 0; P.replie = 0; P.plane = 0; P.haut = 0; P.croisiere = 0;
+  }
+  function chuteAbime() {                // tombé dans le gouffre : un cœur en moins, retour au dernier sol sûr
+    const mourant = P.mode === 'fall' || P.pv <= 0;
+    const [x, sol] = P.dernierSol;
+    P.x = x; P.sol = sol; P.vx = 0; P.vy = 0; P.ruee = -1; P.atk = -1; P.mal = -1; P.pitch = 0; P.pitchV = 0; P.at = 0;
+    if (etat !== 'jeu') { P.mode = 'ground'; return; }
+    if (mourant) { P.mode = 'dead'; return; }
+    P.pv--; secousse = 0.3; gel = 0.1; sfx('aie');
+    if (P.pv <= 0) { P.mode = 'dead'; sfx('chute'); }
+    else { P.mode = 'ground'; P.inv = 2.2; P.flash = 0.12; P.souffle = 1; popup('LE GOUFFRE...', x, sol - 62, BRUME); }
+  }
   function majDragon(dt, E) {
     const dir = (E.R ? 1 : 0) - (E.L ? 1 : 0);
     P.at += dt; P.cd -= dt; P.inv -= dt; P.flash -= dt; P.rueeCd -= dt;
@@ -958,63 +1235,86 @@
     switch (P.mode) {
       case 'air': majVol(dt, E, dir, libre); break;
       case 'jump': {        // décollage : les 7 images du modèle, le corps s'élève à partir de la 2e
-        if (!P.envol && P.at * FPS.jump >= 1) { P.envol = true; P.vy = -V.SAUT * P.charge; poussiere(P.x, SOL, 10, 1.2); sfx('envol'); }
+        if (!P.envol && P.at * FPS.jump >= 1) { P.envol = true; P.vy = -V.SAUT * P.charge; poussiere(P.x, P.sol, 10, 1.2); sfx('envol'); }
         if (P.envol) P.vy = approche(P.vy, -40, dt * 3);
         P.vx = approche(P.vx, libre ? dir * V.AIR : 0, dt * 5);
-        P.x += P.vx * dt; P.y += P.vy * dt;
+        if (P.y + BAS > P.sol - 1) {                          // encore au ras du sol : on avance comme à pied
+          deplacerSol(P.vx * dt);
+          if (deplacerVol(0, P.vy * dt).plafond) P.vy = 0;
+        } else if (deplacerVol(P.vx * dt, P.vy * dt).plafond) P.vy = Math.max(0, P.vy);
         if (P.at * FPS.jump >= AN.jump.frames) {
           P.mode = 'air'; P.at = 0; P.ph = 0; P.amp = 1; P.cad = 2.2; P.pitch = -0.22; P.pitchV = 0;
           P.replie = 0; P.plane = 0; P.haut = 0; P.croisiere = 0;
+          if (P.y + BAS > P.sol) P.y = P.sol - BAS - 1;
         }
         break;
       }
       case 'land':
-        P.vx = approche(P.vx, 0, dt * 5); P.x += P.vx * dt;
-        if (P.at * FPS.land >= AN.land.frames) { P.mode = 'ground'; P.at = 0; }
+        P.vx = approche(P.vx, 0, dt * 5);
+        deplacerSol(P.vx * dt);
+        if (!appuiOuMarche()) tomber();
+        else if (P.at * FPS.land >= AN.land.frames) { P.mode = 'ground'; P.at = 0; }
         break;
       case 'ground': {
         const accroupi = libre && E.D && P.atk < 0;
         P.accroupi = accroupi ? P.accroupi + dt : Math.max(0, P.accroupi - dt * 2);
+        P.souffle = Math.min(1, P.souffle + dt * SOUFFLE.sol);
         if (libre && E.U && P.atk < 0) {
           P.charge = P.accroupi > 0.25 ? 1.3 : 1;
           if (P.charge > 1) popup('SUPER SAUT !', P.x, P.y - 34, OS);
           P.mode = 'jump'; P.at = 0; P.envol = false; P.accroupi = 0;
-          P.y = GA + AN.jump.bodyY[0];
+          P.y = P.sol - G + AN.jump.bodyY[0];
           break;
         }
         P.course = dir && !accroupi && P.atk < 0 ? P.course + dt : 0;
         const vitesse = mix(V.MARCHE, V.COURSE, clamp((P.course - 0.35) / 0.7, 0, 1));
         P.vx = approche(P.vx, libre && !accroupi && P.atk < 0 ? dir * vitesse : 0, dt * 8);
-        P.x += P.vx * dt;
+        if (deplacerSol(P.vx * dt)) P.vx = 0;
+        if (!appuiOuMarche()) { tomber(); break; }
+        if (!toucheCase(PICS, P.x - LARG, P.sol - CORPS_SOL, P.x + LARG, P.sol - 1)) P.dernierSol = [P.x, P.sol];
         const avant = Math.floor(P.pas);
         P.pas += dt * FPS.walk * Math.abs(P.vx) / V.MARCHE;
-        if (Math.floor(P.pas) !== avant && Math.floor(P.pas) % AN.walk.frames === 3 && Math.abs(P.vx) > V.MARCHE * 1.2) poussiere(P.x - P.face * 26, SOL, 2, 0.5);
+        if (Math.floor(P.pas) !== avant && Math.floor(P.pas) % AN.walk.frames === 3 && Math.abs(P.vx) > V.MARCHE * 1.2) poussiere(P.x - P.face * 26, P.sol, 2, 0.5);
         break;
       }
       case 'fall': {
         P.vy += 620 * dt; P.vx = approche(P.vx, 0, dt);
-        P.x += P.vx * dt; P.y += P.vy * dt;
+        const r = deplacerVol(P.vx * dt, P.vy * dt);
         P.amp = approche(P.amp, 0.45, dt * 3); P.cad = 3.2; P.replie = approche(P.replie, 0.35, dt * 3);
         P.ph += P.cad * dt;
         P.pitchV += (40 * (0.9 - P.pitch) - 6 * P.pitchV) * dt; P.pitch += P.pitchV * dt;
         ressortQueue(dt, 0.2);
-        if (P.y >= GA + AN.dead.bodyY[0]) { P.mode = 'dead'; P.at = 0; P.pitch = 0; secousse = 0.25; poussiere(P.x, SOL, 16, 1.4); sfx('pose'); }
+        if (r.sol !== null) { P.sol = r.sol; P.mode = 'dead'; P.at = 0; P.pitch = 0; secousse = 0.25; poussiere(P.x, P.sol, 16, 1.4); sfx('pose'); }
         break;
       }
       case 'dead':
-        P.vx = approche(P.vx, 0, dt * 6); P.x += P.vx * dt;
+        P.vx = approche(P.vx, 0, dt * 6);
+        deplacerSol(P.vx * dt);
         if (etat === 'jeu' && P.at * FPS.dead >= AN.dead.frames + 5) { etat = 'fin'; finT = 0; }
         break;
     }
     if (P.mode === 'ground' || P.mode === 'land' || P.mode === 'dead') {   // au sol, le corps suit l'image
       const d = posture();
-      P.y = AN[d.an].grounded ? GA + AN[d.an].bodyY[d.i] : GA;
+      P.y = P.sol - G + (AN[d.an].grounded ? AN[d.an].bodyY[d.i] : 0);
     }
-    // bornes : pas de retour vers l'acte précédent ; l'arène du Veilleur est close
-    if (etat === 'jeu') {
-      const gauche = arene ? ARENE + 14 : ACTES[acte].debut + 14;
-      if (P.x < gauche) { P.x = gauche; P.vx = Math.max(0, P.vx); }
-      if (arene && P.x > ARENE + W * 0.45) { P.x = ARENE + W * 0.45; P.vx = Math.min(0, P.vx); }   // on fait face au Veilleur
+    // dangers : pics (un cœur et on rebondit), gouffre
+    if (P.pv > 0 && P.mode !== 'dead' && P.mode !== 'fall') {
+      const pied = P.mode === 'air' ? P.y + BAS : P.sol, tete = P.mode === 'air' ? P.y - HAUT : P.sol - CORPS_SOL;
+      if (toucheCase(PICS, P.x - LARG + 6, tete + 4, P.x + LARG - 6, pied - 1)) {
+        blesser(P.x - P.face * 10);
+        if (P.pv > 0) {
+          if (P.mode !== 'air') { P.mode = 'air'; P.at = 0; P.ph = 0; P.pitch = 0; }
+          P.y = Math.min(P.y, pied - BAS - 4); P.vy = -210;
+          P.souffle = Math.max(P.souffle, 0.5);              // de quoi s'extraire des pics, même épuisé
+        }
+      }
+    }
+    if (P.y > NIV.hauteur + 40) chuteAbime();
+    // l'arène du Veilleur est close : on lui fait face
+    if (arene && NIV.arene && etat === 'jeu') {
+      const g = NIV.arene.x + 14, d = NIV.arene.x + W * 0.45;
+      if (P.x < g) { P.x = g; P.vx = Math.max(0, P.vx); }
+      if (P.x > d) { P.x = d; P.vx = Math.min(0, P.vx); }
     }
   }
   function ressortQueue(dt, cible) {
@@ -1023,7 +1323,8 @@
   }
   function majVol(dt, E, dir, libre) {
     let cAmp = 1, cCad = 1.15, cPlane = 0, cReplie = 0;
-    P.elan = Math.max(0, P.elan - dt);
+    const courant = toucheCase(COURANT, P.x - LARG + 8, P.y - HAUT, P.x + LARG - 8, P.y + BAS);
+    if (courant) P.souffle = Math.min(1, P.souffle + dt * SOUFFLE.courant);
     if (P.ruee >= 0) {
       P.ruee += dt;
       const u = P.ruee / 0.3, v = V.RUEE * (1 - 0.45 * u * u);
@@ -1031,10 +1332,15 @@
       cAmp = 0.1; cCad = 0.6; cReplie = 1;
       if (u >= 1) { P.ruee = -1; P.vx = P.face * V.AIR * 1.1; P.vy *= 0.3; }
     } else {
-      const pique = libre && E.D && P.elan <= 0, monte = libre && (E.U || P.elan > 0);
+      // le souffle : voler fatigue ; épuisé, le dragon ne peut que planer vers le bas
+      const epuise = P.souffle <= 0 && !courant;
+      const pique = libre && E.D, monte = libre && E.U && !epuise;
       P.vx = approche(P.vx, libre ? dir * V.AIR : 0, dt * 4);
-      P.vy = approche(P.vy, pique ? V.PIQUE : monte ? -V.VERT * (P.elan > 0 ? 1.6 : 1) : 0, dt * (pique ? 2.5 : 5));
+      P.vy = approche(P.vy, pique ? V.PIQUE : monte ? -V.VERT : epuise ? SOUFFLE.epuise : 0, dt * (pique ? 2.5 : 5));
+      if (etat === 'jeu' && !courant && !arene)                  // face au Veilleur, le combat se livre en vol : le souffle tient
+        P.souffle = Math.max(0, P.souffle - dt * (monte ? SOUFFLE.montee : pique ? 0 : SOUFFLE.palier));
       if (P.mal >= 0) cCad = 3.2;
+      else if (epuise && !pique) { cAmp = 0.15; cCad = 0.6; cPlane = 1; }
       else if (pique) { cAmp = 0.15; cCad = 0.8; cReplie = clamp((P.vy - 50) / 140, 0, 0.9); }
       else if (monte) cCad = 2.3;
       else if (Math.abs(P.vx) > V.AIR * 0.6) {
@@ -1043,10 +1349,13 @@
         cAmp = bat ? 0.85 : 0.12; cCad = bat ? 1.7 : 0.7; cPlane = bat ? 0 : 1;
       } else P.croisiere = 0;
     }
-    P.x += P.vx * dt; P.y += P.vy * dt;
-    if (P.y < PLAFOND + 18) { P.y = PLAFOND + 18; P.vy = Math.max(0, P.vy); }
+    if (courant && P.ruee < 0) P.vy = Math.max(P.vy - 460 * dt, -165);      // le courant porte vers le haut
+    const choc = deplacerVol(P.vx * dt, P.vy * dt);
+    if (choc.plafond) P.vy = Math.max(0, P.vy);
+    if (choc.mur && P.ruee >= 0) { P.ruee = -1; P.vx = 0; secousse = Math.max(secousse, 0.08); }
     // arrondi avant de toucher le sol (ailes levées, nez relevé), puis atterrissage
-    const arrondi = P.vy > 0 && P.y > GA + AN.land.bodyY[0] - Math.max(18, P.vy * 0.24);
+    const solDessous = solSous(P.x, P.y + BAS - 1), hauteur = solDessous === null ? 1e9 : solDessous - (P.y + BAS);
+    const arrondi = P.vy > 0 && hauteur < Math.max(18, P.vy * 0.24);
     P.haut = approche(P.haut, arrondi ? 1 : 0, dt * (arrondi ? 10 : 6));
     if (arrondi) { cReplie = 0; cAmp = 0.3; }
     const cPitch = clamp(clamp(P.vy / V.VERT, -1.4, 1.9) * 0.18 + clamp(P.vx * P.face / V.AIR, -1, 1) * 0.04
@@ -1060,10 +1369,9 @@
     P.bob = -1.3 * P.amp * Math.sin(2 * Math.PI * (frac(P.ph) - 0.2));
     ressortQueue(dt, P.amp * 0.09 * Math.sin(2 * Math.PI * P.ph - 1.3) + clamp(P.vy / V.VERT, -1.5, 1.8) * 0.1
       + (P.ruee >= 0 ? 0.14 : 0) - P.pitchV * 0.03);
-    const seuil = GA + AN.land.bodyY[0];
-    if (P.y >= seuil) {
-      if (P.vy > 15 && P.mal < 0 && P.pv > 0) atterrir();
-      else { P.y = seuil; P.vy = Math.min(P.vy, 0); }
+    if (choc.sol !== null) {
+      if (P.mal < 0 && P.pv > 0) atterrir(choc.sol);
+      else P.vy = Math.min(P.vy, 0);
     }
     P.ombreT -= dt;
     if (P.ruee >= 0 && P.ombreT <= 0) { P.ombreT = 0.028; ombres.push({ d: posture(), vie: 0.2 }); }
@@ -1083,13 +1391,13 @@
                  cavalier: { dy: 0.7 * P.amp * Math.sin(2 * Math.PI * (ph - 0.05)), rot: P.ruee >= 0 ? 0.3 : clamp(P.vy / V.PIQUE, 0, 1) * 0.2 } };
       }
       case 'jump': { const i = unique('jump', P.at, FPS.jump); return cadre('jump', i, P.y - AN.jump.bodyY[i]); }
-      case 'land': return cadre('land', unique('land', P.at, FPS.land), GA);
-      case 'dead': return cadre('dead', unique('dead', P.at, FPS.dead), GA);
+      case 'land': return cadre('land', unique('land', P.at, FPS.land), P.sol - G);
+      case 'dead': return cadre('dead', unique('dead', P.at, FPS.dead), P.sol - G);
       default:
-        if (P.atk >= 0) return cadre('attack', unique('attack', P.atk, FPS.attack), GA);
-        if (P.accroupi > 0.05 && tenuBas) return cadre('jump', 0, GA);
-        if (Math.abs(P.vx) > 12) return cadre('walk', Math.floor(P.pas) % AN.walk.frames, GA);
-        return cadre('land', AN.land.frames - 1, GA);
+        if (P.atk >= 0) return cadre('attack', unique('attack', P.atk, FPS.attack), P.sol - G);
+        if (P.accroupi > 0.05 && tenuBas) return cadre('jump', 0, P.sol - G);
+        if (Math.abs(P.vx) > 12) return cadre('walk', Math.floor(P.pas) % AN.walk.frames, P.sol - G);
+        return cadre('land', AN.land.frames - 1, P.sol - G);
     }
   }
   function autour(q, rot, dx = 0, dy = 0) { ctx.translate(q.p[0] + dx, q.p[1] + dy); ctx.rotate(rot); ctx.translate(-q.p[0], -q.p[1]); }
@@ -1110,7 +1418,7 @@
   function dessinerPosture(d, jeu) {
     if (d.type === 'planche') {
       ctx.save();
-      ctx.translate(Math.round(d.x - cam), Math.round(d.y));
+      ctx.translate(Math.round(d.x), Math.round(d.y));
       ctx.scale(largeurDemiTour(d.fs), 1);
       ctx.drawImage(PL[jeu], d.i * FW, AN[d.an].row * FH, FW, FH, -Math.round(AX), -Math.round(AY), FW, FH);
       ctx.restore();
@@ -1118,7 +1426,7 @@
     }
     const L = PIECES[jeu][d.pose], tete = L.find((q) => q.role === 'tete');
     ctx.save();
-    ctx.translate(Math.round(d.x - cam), Math.round(d.y));
+    ctx.translate(Math.round(d.x), Math.round(d.y));
     ctx.scale(largeurDemiTour(d.fs), 1);
     if (d.pitch) ctx.rotate(d.pitch);
     ctx.translate(Math.round(d.corps.dx), Math.round(d.corps.dy));
@@ -1139,12 +1447,14 @@
   const largeurDemiTour = (fs) => (fs < 0 ? -1 : 1) * (0.3 + 0.7 * Math.abs(fs));
   function dessinerDragon() {
     const d = posture();
-    const haut = clamp((SOL - P.y) / (SOL - PLAFOND), 0, 1);
-    const lo = Math.round(46 * (1 - haut * 0.6));
-    ctx.fillStyle = '#050407';
-    for (let y = 0; y < 3; y++) {
-      const w = Math.round(lo * Math.sqrt(Math.max(0, 1 - ((y - 1) / 1.6) ** 2)));
-      ctx.fillRect(Math.round(P.x - cam + P.fs * 6) - w, SOL + 1 + y, w * 2, 1);
+    const sol = solSous(P.x, P.y - 4);                       // ombre sur le premier sol en dessous
+    if (sol !== null) {
+      const haut = clamp((sol - P.y) / 180, 0, 1), lo = Math.round(46 * (1 - haut * 0.6));
+      ctx.fillStyle = '#050407';
+      for (let y = 0; y < 3; y++) {
+        const w = Math.round(lo * Math.sqrt(Math.max(0, 1 - ((y - 1) / 1.6) ** 2)));
+        ctx.fillRect(Math.round(P.x + P.fs * 6) - w, sol + y - 1, w * 2, 1);
+      }
     }
     for (const o of ombres) { ctx.globalAlpha = 0.5 * o.vie / 0.2; dessinerPosture(o.d, 'fantome'); }
     ctx.globalAlpha = 1;
@@ -1156,14 +1466,15 @@
     dessinerPosture(d, 'normal');
     if (reperes) {
       ctx.fillStyle = '#ff3b3b';
-      ctx.fillRect(Math.round(P.x - cam) - 4, Math.round(P.y), 9, 1); ctx.fillRect(Math.round(P.x - cam), Math.round(P.y) - 4, 1, 9);
-      ctx.fillStyle = '#3bffb0';
-      for (let a = 0; a < 6.28; a += 0.12) ctx.fillRect(Math.round(P.x - cam + P.face * 6 + Math.cos(a) * 34), Math.round(P.y + 4 + Math.sin(a) * 12), 1, 1);
-      texte(`${P.mode} · ${d.type === 'rig' ? 'marionnette' : d.an + ' ' + (d.i + 1)}`.toUpperCase(), 6, H - 12, '#9fb4c8');
+      ctx.fillRect(Math.round(P.x) - 4, Math.round(P.y), 9, 1); ctx.fillRect(Math.round(P.x), Math.round(P.y) - 4, 1, 9);
+      ctx.strokeStyle = '#3bffb0'; ctx.lineWidth = 1;
+      const bas = P.mode === 'air' || P.mode === 'jump' || P.mode === 'fall' ? P.y + BAS : P.sol, haut = P.mode === 'air' || P.mode === 'jump' || P.mode === 'fall' ? P.y - HAUT : P.sol - CORPS_SOL;
+      ctx.strokeRect(Math.round(P.x - LARG) + 0.5, Math.round(haut) + 0.5, LARG * 2, Math.round(bas - haut));
+      texte(`${P.mode} · ${d.type === 'rig' ? 'marionnette' : d.an + ' ' + (d.i + 1)} · souffle ${Math.round(P.souffle * 100)}`.toUpperCase(), Math.round(cam) + 6, Math.round(camY) + H - 12, '#9fb4c8');
     }
   }
 
-  // ================= Ennemis =================
+  // ================= Ennemis : placés sur la carte, réveillés quand ils entrent dans le champ =================
   const TYPES = {
     charognard: { pv: 1, r: 7, pts: 100 },
     ame: { pv: 1, r: 6, pts: 80 },
@@ -1171,6 +1482,7 @@
     spectre: { pv: 2, r: 8, pts: 200 },
     crane: { pv: 2, r: 7, pts: 150 },
   };
+  const TRAVERSE = { ame: true, spectre: true };        // les âmes et les spectres passent à travers la pierre
   function creerEnnemi(type, x, y, dir, diff) {
     const e = { type, x, y, cy: y, t: rand(0, 3), ph: rand(0, 6.28), pv: TYPES[type].pv, flash: 0, vx: 0, vy: 0, visible: true };
     if (type === 'charognard') { e.vx = dir * rand(38, 58) * diff; e.amp = rand(4, 12); }
@@ -1181,6 +1493,7 @@
     return e;
   }
   function majEnnemi(e, dt) {
+    const ax = e.x, ay = e.y;
     e.t += dt; e.flash -= dt;
     switch (e.type) {
       case 'charognard': e.x += e.vx * dt; e.cy = approche(e.cy, P.y, dt * 0.12); e.y = e.cy + Math.sin(e.t * 2.3 + e.ph) * e.amp; break;
@@ -1204,25 +1517,27 @@
         if (Math.random() < 0.6) particule({ x: e.x - Math.sign(e.vx) * 5, y: e.y + rand(-2, 2), vx: -e.vx * 0.2 + rand(-10, 10), vy: rand(-20, 5), vie: 0.3, max: 0.3, t: 1 });
         break;
     }
-    e.y = clamp(e.y, PLAFOND - 6, SOL - 14);
+    if (!TRAVERSE[e.type] && bloque(caseA(Math.floor(e.x / TP), Math.floor(e.y / TP)))) {
+      if (e.type === 'crane') { e.mort = true; explosion(e.x, e.y, true); if (e.source) e.source.mort = true; }   // le crâne se brise sur la pierre
+      else { e.x = ax; e.y = e.cy = ay; e.vx = -e.vx; e.vy = -e.vy; }
+    }
+    e.y = clamp(e.y, 10, NIV.hauteur - 10);
   }
-  function apparitions(dt) {
-    if (carte || arene || CALME || P.pv <= 0) return;
-    prochain -= dt;
-    if (prochain > 0) return;
-    const A = ACTES[acte], diff = 1 + (cycle - 1) * 0.25;
-    prochain = A.intervalle / diff * rand(0.8, 1.2);
-    if (ennemis.length >= A.max) return;
-    const type = A.types[Math.floor(Math.random() * A.types.length)];
-    const droite = Math.random() < 0.72, dir = droite ? -1 : 1;
-    const nb = type === 'chauve' ? 3 : type === 'charognard' && Math.random() < 0.3 ? 2 : 1;
-    const y0 = rand(PLAFOND + 16, SOL - 42);
-    for (let n = 0; n < nb; n++) {
-      const x = cam + (droite ? W + 24 + n * 18 : -24 - n * 18);
-      ennemis.push(creerEnnemi(type, x, clamp(y0 + (n - 1) * 14, PLAFOND + 10, SOL - 28), dir, diff));
+  function apparitions() {
+    if (arene || CALME || P.pv <= 0 || (carte && carte.fondu)) return;
+    const diff = 1 + (cycle - 1) * 0.25;
+    for (const o of NIV.objets) {
+      if (o.genre !== 'ennemi' || o.mort) continue;
+      const champ = o.x > cam - 24 && o.x < cam + W + 48 && o.y > camY - 40 && o.y < camY + H + 40;
+      if (o.actif === 'parti') { if (!champ) o.actif = false; continue; }   // reviendra quand on repassera
+      if (o.actif || !champ) continue;
+      o.actif = true;
+      const e = creerEnnemi(o.type, o.x, o.y, P.x < o.x ? -1 : 1, diff);
+      e.source = o; ennemis.push(e);
     }
   }
   function tuer(e) {
+    if (e.source) e.source.mort = true;
     explosion(e.x, e.y, e.type === 'crane' || e.type === 'spectre');
     if (etat !== 'jeu') return;
     combo = temps - dernierKill < 1.4 ? Math.min(combo + 1, 9) : 1;
@@ -1231,14 +1546,18 @@
     score += pts; gel = Math.max(gel, 0.04);
     popup('+' + pts, e.x, e.y - 10, combo > 1 ? '#e0c080' : OS);
     if (combo > 1) { popup('COMBO ×' + combo, e.x, e.y - 22, FEU[2]); sfx('combo'); }
-    if (P.pv < PV_MAX && Math.random() < (arene ? 0.4 : 0.2)) coeurs.push({ x: e.x, y: e.y, t: 0 });
-    if (score > record) { record = score; try { localStorage.setItem('dragon-rider-record', record); } catch {} }
+    if (P.pv < PV_MAX && Math.random() < (arene ? 0.4 : 0.2)) coeurs.push({ x: e.x, y: e.y, t: 0, sol: solSous(e.x, e.y) });
+    noterRecord();
   }
+  function noterRecord() { if (score > record) { record = score; try { localStorage.setItem('dragon-rider-record', record); } catch {} } }
 
   // ---------- le Veilleur, au fond des cryptes ----------
   function entrerArene() {
     arene = true; ennemis = [];
-    veilleur = { x: ARENE + W * 0.76, y: SOL + 70, pv: 22, pvMax: 22, t: 0, entree: 0, tir: 3, invoc: 9, flash: 0, machoire: 0, mort: -1, boum: 0 };
+    const V_ = NIV.veilleur, sol = solSous(V_.x, V_.y) ?? NIV.hauteur;
+    const y = clamp(sol - SOL, 0, Math.max(0, NIV.hauteur - H));
+    NIV.arene = { x: Math.round(V_.x - W * 0.74), y, sol, haut: y + 48 };
+    veilleur = { x: V_.x, y: sol + 70, pv: 22, pvMax: 22, t: 0, entree: 0, tir: 3, invoc: 9, flash: 0, machoire: 0, mort: -1, boum: 0 };
     carte = { titre: 'LE VEILLEUR', nom: '', sous: "IL N'A JAMAIS DORMI.", t: 0, fondu: false };
     sfx('veilleur');
   }
@@ -1257,14 +1576,14 @@
       v.mort = 0; orbes = []; secousse = 0.6; sfx('veilleur');
       ennemis.forEach((e) => explosion(e.x, e.y, true)); ennemis = [];
       score += 5000 * cycle; popup('+' + 5000 * cycle, v.x, v.y - 40, '#e0c080', 2);
-      if (score > record) { record = score; try { localStorage.setItem('dragon-rider-record', record); } catch {} }
+      noterRecord();
     }
   }
   function majVeilleur(dt) {
     const v = veilleur;
     if (!v) return;
     v.t += dt; v.flash -= dt;
-    const haut = PLAFOND + 34, bas = SOL - 64, milieu = (haut + bas) / 2;
+    const A = NIV.arene, haut = A.haut + 16, bas = A.sol - 64, milieu = (haut + bas) / 2;
     if (v.mort >= 0) {
       v.mort += dt; v.boum -= dt; v.y += 10 * dt;
       if (v.boum <= 0) { v.boum = 0.12; explosion(v.x + rand(-26, 26), v.y + rand(-22, 26), true); secousse = 0.3; }
@@ -1273,7 +1592,7 @@
     }
     if (v.entree < 2) { v.entree += dt; v.y = approche(v.y, milieu, dt * 1.6); v.machoire = v.entree < 1.6 ? 0.5 + 0.5 * Math.sin(v.t * 9) : 0; return; }
     const rage = v.pv < v.pvMax / 2, diff = 1 + (cycle - 1) * 0.2;
-    v.x = ARENE + W * (0.74 + 0.07 * Math.sin(v.t * 0.55));
+    v.x = A.x + W * (0.74 + 0.07 * Math.sin(v.t * 0.55));
     v.y = milieu + Math.sin(v.t * (rage ? 1.05 : 0.75)) * (bas - haut) * 0.45;
     v.tir -= dt * diff; v.invoc -= dt;
     v.machoire = approche(v.machoire, v.tir < 0.35 ? 1 : 0, dt * 10);
@@ -1289,26 +1608,37 @@
     }
   }
 
-  // ================= Le monde : ennemis, boules de feu, orbes, cœurs, particules =================
+  // ================= Le monde : ennemis, boules de feu, orbes, cœurs, objets de la carte, particules =================
   function majMonde(dt) {
-    apparitions(dt);
+    apparitions();
     for (const e of ennemis) majEnnemi(e, dt);
-    ennemis = ennemis.filter((e) => Math.abs(e.x - (cam + W / 2)) < W + 220);
+    ennemis = ennemis.filter((e) => {
+      const loin = Math.abs(e.x - (cam + W / 2)) > W + 220 || Math.abs(e.y - (camY + H / 2)) > H + 160;
+      if (loin && e.source && !e.mort) e.source.actif = 'parti';
+      return !loin;
+    });
     majVeilleur(dt);
 
     for (const b of boules) {
       b.vie -= dt; b.x += b.vx * dt; b.y += b.vy * dt;
       b.trace.unshift([b.x, b.y]); if (b.trace.length > 7) b.trace.pop();
       if (Math.random() < 0.6) particule({ x: b.x, y: b.y, vx: -b.vx * 0.15 + rand(-20, 20), vy: -b.vy * 0.15 + rand(-25, 25), vie: rand(0.12, 0.3), max: 0.3, t: 1 });
-      if (b.y > SOL) { b.vie = 0; explosionSol(b.x); continue; }
+      const mi = [Math.floor((b.x - b.vx * dt / 2) / TP), Math.floor((b.y - b.vy * dt / 2) / TP)];
+      const [tx, ty] = bloque(caseA(mi[0], mi[1])) ? mi : [Math.floor(b.x / TP), Math.floor(b.y / TP)], t = caseA(tx, ty);
+      if (bloque(t) || b.y > NIV.hauteur) {                  // la pierre arrête le feu ; le mur fissuré cède
+        b.vie = 0;
+        if (t === FRAGILE) briser(tx, ty);
+        explosionSol(b.x - b.vx * 0.012, b.y - b.vy * 0.012);
+        continue;
+      }
       for (const e of ennemis) {
         if (e.mort || !e.visible || Math.hypot(e.x - b.x, e.y - b.y) > TYPES[e.type].r + 8) continue;
         b.vie = 0; e.pv--; e.flash = 0.08;
         if (e.pv <= 0) { e.mort = true; tuer(e); } else sfx('touche');
         break;
       }
-      for (const o of orbes) if (b.vie > 0 && Math.hypot(o.x - b.x, o.y - b.y) < 10) { o.vie = 0; b.vie = 0; explosionSol(o.x); }
-      if (veilleur && b.vie > 0 && Math.hypot(veilleur.x - b.x, veilleur.y - b.y) < 28) { b.vie = 0; blesserVeilleur(veilleur, 1); explosionSol(b.x); }
+      for (const o of orbes) if (b.vie > 0 && Math.hypot(o.x - b.x, o.y - b.y) < 10) { o.vie = 0; b.vie = 0; explosionSol(o.x, o.y); }
+      if (veilleur && b.vie > 0 && Math.hypot(veilleur.x - b.x, veilleur.y - b.y) < 28) { b.vie = 0; blesserVeilleur(veilleur, 1); explosionSol(b.x, b.y); }
     }
     boules = boules.filter((b) => b.vie > 0);
 
@@ -1318,23 +1648,24 @@
     for (const e of ennemis) {
       if (e.mort || !e.visible || P.pv <= 0 || !touche(e.x, e.y, TYPES[e.type].r)) continue;
       if (fonce) { e.mort = true; tuer(e); }
-      else if (P.inv <= 0) { blesser(e.x); e.mort = true; explosion(e.x, e.y, false); }
+      else if (P.inv <= 0) { blesser(e.x); e.mort = true; if (e.source) e.source.mort = true; explosion(e.x, e.y, false); }
     }
     ennemis = ennemis.filter((e) => !e.mort);
     for (const o of orbes) {
       o.vie -= dt; o.x += o.vx * dt; o.y += o.vy * dt;
       if (P.pv > 0 && touche(o.x, o.y, 3) && P.ruee < 0) { o.vie = 0; blesser(o.x); }
     }
-    orbes = orbes.filter((o) => o.vie > 0 && o.y > PLAFOND - 20 && o.y < SOL + 10 && Math.abs(o.x - cam - W / 2) < W);
+    orbes = orbes.filter((o) => o.vie > 0 && o.y > camY - 20 && o.y < camY + H + 10 && Math.abs(o.x - cam - W / 2) < W);
     for (const c of coeurs) {
-      c.t += dt; c.y = Math.min(SOL - 8, c.y + 14 * dt);
+      c.t += dt; c.y = Math.min((c.sol ?? NIV.hauteur + 60) - 8, c.y + 14 * dt);
       if (P.pv > 0 && Math.hypot(c.x - P.x, c.y - P.y - 4) < 24) { c.pris = true; P.pv = Math.min(PV_MAX, P.pv + 1); popup('VIE +1', c.x, c.y - 10, '#e0505a'); sfx('soin'); }
     }
     coeurs = coeurs.filter((c) => !c.pris && c.t < 9);
+    if (etat === 'jeu' && P.pv > 0) ramasser();
 
     for (const p of particules) {
       p.vie -= dt; p.x += p.vx * dt; p.y += p.vy * dt;
-      if (p.genre === 'plume' || p.genre === 'os') { p.vy += 200 * dt; p.vx *= 0.97; p.rot += dt * 7; }
+      if (p.genre === 'plume' || p.genre === 'os' || p.genre === 'gravat') { p.vy += 200 * dt; p.vx *= 0.97; p.rot += dt * 7; }
       else if (p.genre === 'poussiere') { p.vx *= 0.9; p.vy *= 0.92; }
       else { p.vx *= 0.93; p.vy *= 0.93; }
     }
@@ -1344,12 +1675,32 @@
     for (const p of popups) { p.vie -= dt; p.y -= 22 * dt; }
     popups = popups.filter((p) => p.vie > 0);
   }
-  function explosionSol(x) {
-    particule({ x, y: SOL - 2, vie: 0.25, max: 0.25, genre: 'onde' });
-    for (let i = 0; i < 8; i++) particule({ x, y: SOL - 1, vx: rand(-70, 70), vy: rand(-90, -20), vie: rand(0.2, 0.45), max: 0.45, t: Math.floor(rand(1, 3)) });
+  // reliques, cœurs posés sur la carte, autels (on y reprendra après une chute)
+  function ramasser() {
+    const hx = P.x + P.face * 6, hy = P.y + 4;
+    for (const o of NIV.objets) {
+      if (o.genre === 'relique' || o.genre === 'coeur') {
+        if (o.pris || ((o.x - hx) / 42) ** 2 + ((o.y - hy) / 26) ** 2 > 1) continue;   // au contact du corps, du cou ou de la tête
+        o.pris = true;
+        if (o.genre === 'coeur') { P.pv = Math.min(PV_MAX, P.pv + 1); popup('VIE +1', o.x, o.y - 10, '#e0505a'); sfx('soin'); continue; }
+        NIV.prises++; score += 500 * cycle; noterRecord();
+        popup('RELIQUE ' + NIV.prises + '/' + NIV.reliques, o.x, o.y - 12, '#e0c080');
+        for (let i = 0; i < 10; i++) particule({ x: o.x, y: o.y, vx: rand(-60, 60), vy: rand(-80, 10), vie: rand(0.3, 0.6), max: 0.6, t: 1, genre: 'ecto' });
+        sfx('combo');
+      } else if (o.genre === 'autel' && !o.allume && auSol() && Math.abs(o.x - P.x) < 26 && Math.abs(o.y - P.sol) < 6) {
+        NIV.objets.forEach((a) => { if (a.genre === 'autel') a.allume = false; });
+        o.allume = true; NIV.reprise = [o.x, o.y];
+        P.pv = PV_MAX; P.souffle = 1;
+        popup("L'AUTEL S'ALLUME", o.x, o.y - 40, FEU[1]); sfx('soin'); sfx('glas', 0.1);
+      }
+    }
+  }
+  function explosionSol(x, y) {
+    particule({ x, y, vie: 0.25, max: 0.25, genre: 'onde' });
+    for (let i = 0; i < 8; i++) particule({ x, y: y + 1, vx: rand(-70, 70), vy: rand(-90, -20), vie: rand(0.2, 0.45), max: 0.45, t: Math.floor(rand(1, 3)) });
   }
 
-  // ---------- dessin des ennemis, du Veilleur et des effets ----------
+  // ---------- dessin des ennemis, du Veilleur et des effets (coordonnées du monde) ----------
   const COEUR = ['.XX.XX.', 'XXXXXXX', 'XXXXXXX', '.XXXXX.', '..XXX..', '...X...'];
   function coeur(x, y, plein) {
     COEUR.forEach((l, r) => [...l].forEach((c, k) => {
@@ -1359,9 +1710,9 @@
     }));
   }
   function dessinerEnnemis() {
-    for (const c of coeurs) if (c.t < 7 || Math.floor(temps * 12) % 2) coeur(Math.round(c.x - cam) - 3, Math.round(c.y + Math.sin(c.t * 4) * 2) - 3, true);
+    for (const c of coeurs) if (c.t < 7 || Math.floor(temps * 12) % 2) coeur(Math.round(c.x) - 3, Math.round(c.y + Math.sin(c.t * 4) * 2) - 3, true);
     for (const e of ennemis) {
-      const x = Math.round(e.x - cam), y = Math.round(e.y);
+      const x = Math.round(e.x), y = Math.round(e.y);
       if (e.type === 'ame') {
         const f = Math.sin(e.t * 9) > 0;
         ctx.globalAlpha = 0.85;
@@ -1383,7 +1734,7 @@
     }
     const v = veilleur;
     if (v) {
-      const x = Math.round(v.x - cam), y = Math.round(v.y);
+      const x = Math.round(v.x), y = Math.round(v.y);
       if (!(v.mort >= 0 && Math.floor(temps * 20) % 2)) {
         if (Math.random() < 0.5) particule({ x: v.x + rand(-24, 24), y: v.y + rand(-10, 20), vx: rand(-5, 5), vy: rand(-30, -12), vie: 0.8, max: 0.8, t: 1, genre: 'ecto' });
         const blanc = v.flash > 0;
@@ -1397,22 +1748,23 @@
   }
   function dessinerEffets() {
     for (const b of boules) {
-      b.trace.forEach(([tx, ty], k) => { if (k) disque(tx - cam, ty, Math.max(1, 5 - k), FEU[Math.min(6, 2 + k)]); });
-      const x = b.x - cam, f = Math.floor(temps * 20) % 2;
-      disque(x, b.y, 7 + f, FEU[4]); disque(x, b.y, 5 + f, FEU[2]); disque(x, b.y, 3, FEU[0]);
+      b.trace.forEach(([tx, ty], k) => { if (k) disque(tx, ty, Math.max(1, 5 - k), FEU[Math.min(6, 2 + k)]); });
+      const f = Math.floor(temps * 20) % 2;
+      disque(b.x, b.y, 7 + f, FEU[4]); disque(b.x, b.y, 5 + f, FEU[2]); disque(b.x, b.y, 3, FEU[0]);
     }
     for (const o of orbes) {
-      const x = o.x - cam, f = Math.floor(temps * 12) % 2;
-      disque(x, o.y, 5, ENCRE); disque(x, o.y, 4, SANG); disque(x, o.y, 2 + f, SANG_VIF); ctx.fillStyle = '#ffb09a'; ctx.fillRect(Math.round(x), Math.round(o.y), 1, 1);
+      const f = Math.floor(temps * 12) % 2;
+      disque(o.x, o.y, 5, ENCRE); disque(o.x, o.y, 4, SANG); disque(o.x, o.y, 2 + f, SANG_VIF); ctx.fillStyle = '#ffb09a'; ctx.fillRect(Math.round(o.x), Math.round(o.y), 1, 1);
     }
     for (const p of particules) {
-      const x = Math.round(p.x - cam), y = Math.round(p.y), k = clamp(p.vie / p.max, 0, 1);
+      const x = Math.round(p.x), y = Math.round(p.y), k = clamp(p.vie / p.max, 0, 1);
       if (p.genre === 'braise') { ctx.fillStyle = FEU[Math.min(6, Math.floor((1 - k) * 7))]; ctx.fillRect(x, y, p.t, p.t); }
       else if (p.genre === 'plume' || p.genre === 'os') {
         ctx.fillStyle = p.genre === 'os' ? (k > 0.3 ? OS2 : CENDRE) : (k > 0.3 ? '#3a2d45' : '#5a4656');
         const l = Math.cos(p.rot) > 0 ? 3 : 1;
         ctx.fillRect(x - l, y, l * 2, 1); ctx.fillRect(x, y - 1, 1, 1);
-      } else if (p.genre === 'ecto') { ctx.fillStyle = k > 0.5 ? BRUME : '#3e3549'; ctx.fillRect(x, y, 1, 1); }
+      } else if (p.genre === 'gravat') { ctx.fillStyle = k > 0.4 ? '#3a2d45' : '#241c2e'; ctx.fillRect(x, y, Math.cos(p.rot) > 0 ? 2 : 1, 2); }
+      else if (p.genre === 'ecto') { ctx.fillStyle = k > 0.5 ? BRUME : '#3e3549'; ctx.fillRect(x, y, 1, 1); }
       else if (p.genre === 'poussiere') disque(x, y, Math.round(p.t + (1 - k) * 3), k > 0.5 ? '#5a4f5f' : '#3a3044');
       else if (p.genre === 'eclair') disque(x, y, 9, '#ffffff');
       else if (p.genre === 'bouche') { disque(x, y, 5, FEU[3]); disque(x, y, 3, FEU[1]); disque(x, y, 1, FEU[0]); }
@@ -1422,7 +1774,7 @@
         for (let a = 0; a < 6.28; a += 1 / r) ctx.fillRect(Math.round(x + Math.cos(a) * r), Math.round(y + Math.sin(a) * r), 1, 1);
       }
     }
-    for (const p of popups) if (p.vie > 0.25 || Math.floor(temps * 20) % 2) texte(p.txt, p.x - cam, p.y, p.teinte, p.k, 'ombre', 'centre');
+    for (const p of popups) if (p.vie > 0.25 || Math.floor(temps * 20) % 2) texte(p.txt, Math.round(p.x), Math.round(p.y), p.teinte, p.k, 'ombre', 'centre');
   }
 
   // ================= Interface (dessinée dans l'image, en police pixel) =================
@@ -1439,12 +1791,20 @@
   }
   function hud() {
     for (let i = 0; i < PV_MAX; i++) coeur(6 + i * 9, 6, i < P.pv);
+    // le souffle, sous les cœurs : il pâlit quand il s'épuise, clignote quand il est vide
+    const s = P.souffle, vide = s <= 0.02;
+    if (!vide || Math.floor(temps * 6) % 2) barre(6, 15, 43, s, s < 0.3 ? SANG_VIF : '#9a8fa6');
     texte('SCORE ' + pad(score, 6), W - 6, 6, OS, 1, 'ombre', 'droite');
     texte('RECORD ' + pad(record, 6), W - 6, 16, BRUME, 1, 'ombre', 'droite');
     hautParleur(W - 16, 26);
     if (!arene) {
-      texte('ACTE ' + ACTES[acte].num + (cycle > 1 ? ' · CYCLE ' + romain(cycle) : ''), 6, 17, BRUME);
-      barre(6, 27, 52, (P.x - ACTES[acte].debut) / (ACTES[acte].fin - ACTES[acte].debut), SANG_VIF);
+      texte('ACTE ' + ACTES[acte].num + (cycle > 1 ? ' · CYCLE ' + romain(cycle) : ''), 6, 22, BRUME);
+      barre(6, 32, 52, P.x / NIV.largeur, CENDRE);
+      if (NIV.reliques) {                                    // reliquaire : petite croix et compte
+        ctx.fillStyle = ENCRE; ctx.fillRect(63, 28, 5, 9); ctx.fillRect(61, 30, 9, 3);
+        ctx.fillStyle = NIV.prises ? '#e0c080' : OS2; ctx.fillRect(64, 29, 3, 7); ctx.fillRect(62, 31, 7, 1);
+        texte(NIV.prises + '/' + NIV.reliques, 72, 29, NIV.prises === NIV.reliques ? '#e0c080' : OS2);
+      }
     }
     if (veilleur && veilleur.entree > 0.6 && veilleur.mort < 0) {
       texte('LE VEILLEUR', W / 2, 6, OS, 1, 'ombre', 'centre');
@@ -1475,13 +1835,14 @@
     const l = [
       '← → VOLER   ↑ MONTER   ↓ PIQUER',
       'X OU ESPACE : FEU (MAINTENU : RAFALE)',
-      'C : RUÉE À TRAVERS LES ENNEMIS',
-      '↓ + C : PIQUÉ      2× ← → : RUÉE',
+      'C OU 2× ← → : RUÉE (BRISE LES MURS)',
+      'VOLER USE LE SOUFFLE. LE SOL LE REND.',
+      'LES COLONNES DE CENDRE TE PORTENT.',
       'AU SOL : ↓ ACCROUPI   ↑ SAUTER',
     ];
-    const y0 = Math.round(H * 0.56);
+    const y0 = Math.round(H * 0.54);
     ctx.fillStyle = 'rgba(7,6,11,0.72)'; ctx.fillRect(Math.round(W / 2) - 118, y0 - 6, 236, l.length * 11 + 7);
-    l.forEach((s, i) => texte(s, W / 2, y0 + i * 11, OS, 1, 'ombre', 'centre'));
+    l.forEach((s, i) => texte(s, W / 2, y0 + i * 11, i === 3 || i === 4 ? OS2 : OS, 1, 'ombre', 'centre'));
     hautParleur(W - 16, 26);
   }
   function ecranFin(dt) {
@@ -1490,7 +1851,7 @@
     const y = Math.round(H * 0.3);
     texte('LE DRAGONNIER EST TOMBÉ', W / 2, y, LOGO, W >= 290 ? 2 : 1, 'contour', 'centre');
     texte('SCORE ' + pad(score, 6) + '   RECORD ' + pad(record, 6), W / 2, y + 30, OS2, 1, 'ombre', 'centre');
-    if (Math.floor(temps * 2) % 2) texte(arene ? 'FEU : AFFRONTER DE NOUVEAU LE VEILLEUR' : "FEU : REPRENDRE L'ACTE " + ACTES[acte].num, W / 2, y + 50, OS, 1, 'contour', 'centre');
+    if (Math.floor(temps * 2) % 2) texte(NIV.reprise ? "FEU : REPRENDRE À L'AUTEL" : "FEU : REPRENDRE L'ACTE " + ACTES[acte].num, W / 2, y + 50, OS, 1, 'contour', 'centre');
   }
   function ecranEpilogue() {
     ctx.fillStyle = ENCRE; ctx.fillRect(0, 0, W, H);
@@ -1502,18 +1863,31 @@
     }
   }
 
-  // ================= Démo de l'écran titre (le dragon vole tout seul) =================
-  let demoAvant = 0;
+  // ================= Démo de l'écran titre : le dragon patrouille au-dessus du premier gouffre =================
+  let demoAvant = 0, demoDir = 1;
   function entreesDemo() {
-    const E = { L: false, R: true, U: false, D: false, feu: false, appuis: new Set(), gestes: new Set() };
+    if (P.x > 600) demoDir = -1; else if (P.x < 140) demoDir = 1;
+    const E = { L: demoDir < 0, R: demoDir > 0, U: false, D: false, feu: false, appuis: new Set(), gestes: new Set() };
     const c0 = demoAvant % 7, c1 = temps % 7;
     demoAvant = temps;
     const passe = (t) => c0 < t && c1 >= t;
-    E.U = P.y > HORIZON - 16 || (c1 > 1 && c1 < 1.6);
-    E.D = P.y < PLAFOND + 40 && !E.U;
+    const ys = P.y - camY;                                   // altitude à l'écran, sous le titre
+    E.U = ys > 128 || (c1 > 1 && c1 < 1.6);
+    E.D = ys < 88 && !E.U;
     if (passe(0.5) || passe(2.2) || passe(4.6) || passe(6.3)) E.appuis.add('fire');
     if (passe(5.5)) E.appuis.add('ruee');
     return E;
+  }
+
+  // ================= Caméra : suit le dragon dans les deux directions, se fige dans l'arène =================
+  function suivreCamera(dt) {
+    if (arene && NIV.arene) { cam = approche(cam, NIV.arene.x, dt * 3); camY = approche(camY, NIV.arene.y, dt * 3); return; }
+    cam = clamp(approche(cam, P.x - W * 0.38 + P.face * W * 0.08, dt * 3), 0, Math.max(0, NIV.largeur - W));
+    let cible;
+    if (etat === 'titre') cible = NIV.depart[1] - SOL;
+    else if (P.mode === 'ground' || P.mode === 'land' || P.mode === 'dead') cible = P.sol - SOL;   // au sol : le sol à sa place habituelle
+    else cible = clamp(camY, P.y - H * 0.74, P.y - H * 0.3);
+    camY = clamp(approche(camY, cible, dt * 4), 0, Math.max(0, NIV.hauteur - H));
   }
 
   // ================= Boucle =================
@@ -1535,15 +1909,13 @@
     else if (etat === 'fin' && finT > 0.8 && appuis.has('fire')) reprendre();
     else if (gel > 0) gel -= dt;                                   // micro-pause à l'impact
     else {
-      if (etat === 'titre') P.pv = PV_MAX;
+      if (etat === 'titre') { P.pv = PV_MAX; P.souffle = 1; }
       majCarte(dt);
       majDragon(dt, E);
       if (etat === 'jeu') progression();
       majMonde(dt);
       majMeteo(dt);
-      const borne = etat === 'titre' ? -1e9 : arene ? ARENE : ACTES[acte].debut - 8;
-      const cible = arene ? ARENE : P.x - W * 0.38 + P.face * W * 0.08;
-      cam = Math.max(borne, approche(cam, cible, dt * 3));
+      suivreCamera(dt);
     }
     appuis = new Set(); gestes = new Set();
     secousse = Math.max(0, secousse - dt);
@@ -1551,9 +1923,15 @@
     ctx.save();
     if (secousse > 0 && !reduit) ctx.translate(Math.round(rand(-2, 2) * secousse * 5), Math.round(rand(-2, 2) * secousse * 5));
     decor();
+    ctx.save();
+    ctx.translate(-Math.round(cam), -Math.round(camY));          // le monde, en coordonnées de la carte
+    dessinerCourants();
+    dessinerTuiles();
+    dessinerObjets();
     dessinerEnnemis();
     dessinerDragon();
     dessinerEffets();
+    ctx.restore();
     premierPlan();
     dessinerMeteo();
     ctx.restore();
@@ -1567,28 +1945,43 @@
   // lecture seule, pour les tests automatisés (outils de vérification)
   window.__dragonRider = () => {
     return { etat, acte: acte + 1, decor: acteVisuel + 1, arene, veilleur: veilleur ? veilleur.pv : null, veilleurY: veilleur ? Math.round(veilleur.y) : null, mode: P.mode,
-             pv: P.pv, score, ennemis: ennemis.length, x: Math.round(P.x), sx: Math.round(P.x - cam), sy: Math.round(P.y),
+             pv: P.pv, score, ennemis: ennemis.length, x: Math.round(P.x), y: Math.round(P.y), sol: P.sol, souffle: +P.souffle.toFixed(2),
+             sx: Math.round(P.x - cam), sy: Math.round(P.y - camY), cam: Math.round(cam), camY: Math.round(camY),
+             reliques: NIV.prises + '/' + NIV.reliques, reprise: NIV.reprise, largeur: NIV.largeur,
              visuel: (() => { const d = posture(); return d.type === 'rig' ? 'marionnette' : d.an + ' ' + (d.i + 1); })() };
   };
+  // #essai : poser le dragon où l'on veut pour tester un passage (outils de vérification)
+  if (ESSAI) window.__essai = {
+    poser(tx, ty) { P.x = tx * TP + TP / 2; P.sol = (ty + 1) * TP; P.mode = 'ground'; P.at = 0; P.vx = P.vy = 0; P.y = P.sol - G; P.dernierSol = [P.x, P.sol]; cadrer(); },
+    voler(tx, ty) { P.x = tx * TP + TP / 2; P.y = ty * TP + TP / 2; P.mode = 'air'; P.vx = P.vy = 0; cadrer(); },
+    niveau: () => ({ l: NIV.l, h: NIV.h, objets: NIV.objets.length, reliques: NIV.reliques }),
+    souffle(v) { P.souffle = v; },
+    pv(n) { P.pv = n; },
+    caseA: (tx, ty) => caseA(tx, ty),
+    objets: () => NIV.objets.filter((o) => o.genre !== 'decor').map((o) => `${o.genre}${o.type ? '/' + o.type : ''}@${Math.floor(o.x / TP)},${Math.floor(o.y / TP)}${o.pris ? ' pris' : ''}${o.allume ? ' allumé' : ''}${o.mort ? ' mort' : ''}`),
+  };
 
+  function panne(l1, l2) {
+    disposer();
+    ctx.fillStyle = ENCRE; ctx.fillRect(0, 0, W, H);
+    texte(l1, W / 2, H / 2 - 6, SANG_VIF, 1, 'ombre', 'centre');
+    texte(l2, W / 2, H / 2 + 8, OS, 1, 'ombre', 'centre');
+  }
   const img = new Image(), imgPlanche = new Image();
   img.onload = () => { imgPlanche.onload = demarrerJeu; imgPlanche.src = PLANCHE; };
   const demarrerJeu = () => {
+    if (!NIVEAUX || NIVEAUX.length < 3) { panne('NIVEAUX INTROUVABLES', 'RECONSTRUIRE : OUTILS/CONSTRUIRE_JEU.PY'); return; }
     disposer();
     PIECES = construirePieces(img);
     PL = construirePlanche(imgPlanche);
     DECORS = [decorTerres(), decorCimetiere(), decorCryptes()];
     LUNE = construireLune(); BRUME_T = tuileBrume(); HALOS = [construireHalo(14, 1), construireHalo(16, 2)];
+    TUILES = construireTuiles(); ACCESSOIRES = construireAccessoires();
     construireEnnemis();
     modeTitre();
     requestAnimationFrame((t) => { avant = t; requestAnimationFrame(boucle); });
   };
-  img.onerror = () => {
-    disposer();
-    ctx.fillStyle = ENCRE; ctx.fillRect(0, 0, W, H);
-    texte('PLANCHE DU DRAGON INTROUVABLE', W / 2, H / 2 - 6, SANG_VIF, 1, 'ombre', 'centre');
-    texte('RECONSTRUIRE : OUTILS/CONSTRUIRE_JEU.PY', W / 2, H / 2 + 8, OS, 1, 'ombre', 'centre');
-  };
+  img.onerror = () => panne('PLANCHE DU DRAGON INTROUVABLE', 'RECONSTRUIRE : OUTILS/CONSTRUIRE_JEU.PY');
   img.src = ATLAS;
 })();
 </script>
